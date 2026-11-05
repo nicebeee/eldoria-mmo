@@ -416,7 +416,7 @@ function animQuad(a, p, dt, time) {
 }
 
 // ---------------------------------------------------------------- таблички над головой
-export function createNameplate(text, color = '#ffffff', withBar = true) {
+export function createNameplate(text, color = '#ffffff', withBar = true, friendly = false) {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 64;
   const ctx = c.getContext('2d');
@@ -440,7 +440,7 @@ export function createNameplate(text, color = '#ffffff', withBar = true) {
     if (withBar) {
       ctx.fillStyle = 'rgba(0,0,0,.75)';
       ctx.fillRect(38, 37, 180, 15);
-      ctx.fillStyle = frac > 0.5 ? '#d23a2a' : frac > 0.25 ? '#e8762a' : '#f0c040';
+      ctx.fillStyle = friendly ? (frac > 0.35 ? '#3cc850' : '#e8a02a') : frac > 0.5 ? '#d23a2a' : frac > 0.25 ? '#e8762a' : '#f0c040';
       ctx.fillRect(40, 39, 176 * Math.max(0, frac), 11);
     }
     tex.needsUpdate = true;

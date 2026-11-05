@@ -3,20 +3,10 @@ import { SPAWN_ZONES } from './data.js';
 import { mat, box } from './models.js';
 import { clamp, smoothstep, mulberry32 } from './utils.js';
 
-export const WORLD_HALF = 150;
-export const VILLAGE_RADIUS = 26;
-const GRAVE = [25, -88], ORC = [-85, -68], GOBLIN = [-62, 55], WOLF = [55, 45], BOSS = [-112, -112];
+import { heightAt, WORLD_HALF, VILLAGE_RADIUS } from './terrain.js';
+export { heightAt, zoneNameAt, WORLD_HALF, VILLAGE_RADIUS } from './terrain.js';
 
-export function heightAt(x, z) {
-  const d = Math.hypot(x, z);
-  let h = Math.sin(x * 0.035) * Math.cos(z * 0.03) * 3.5
-    + Math.sin(x * 0.08 + 1.3) * Math.sin(z * 0.07 + 0.7) * 1.2
-    + Math.sin((x - z) * 0.015) * 2.5;
-  h *= smoothstep(20, 40, d);
-  const e = Math.max(Math.abs(x), Math.abs(z));
-  h += smoothstep(128, 158, e) * 26;
-  return h;
-}
+const GRAVE = [25, -88], ORC = [-85, -68], GOBLIN = [-62, 55], WOLF = [55, 45], BOSS = [-112, -112];
 
 function segDist(px, pz, ax, az, bx, bz) {
   const dx = bx - ax, dz = bz - az;
@@ -30,14 +20,6 @@ function pathDist(x, z) {
   return m;
 }
 const near = (x, z, c, r) => Math.hypot(x - c[0], z - c[1]) < r;
-
-export function zoneNameAt(x, z) {
-  if (Math.hypot(x, z) < VILLAGE_RADIUS + 4) return 'Деревня Рассвет';
-  for (const zn of SPAWN_ZONES) {
-    if (Math.hypot(x - zn.center[0], z - zn.center[1]) < Math.max(zn.radius + 12, 18)) return zn.name;
-  }
-  return 'Долина Эльдории';
-}
 
 function addShadows(o) {
   o.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });

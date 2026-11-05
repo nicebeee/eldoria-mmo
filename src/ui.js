@@ -59,12 +59,15 @@ export class UI {
 
   chatCommand(msg) {
     if (msg === '/help') {
-      this.log('Управление: WASD — бег, Пробел — прыжок, зажатая мышь — поворот камеры, колесо — зум. ЛКМ по врагу или Tab — выбрать цель (автоатака). 1-3 — умения, 4 — зелье здоровья, 5 — зелье маны. E — говорить/собирать. I — сумка, C — персонаж, L — задания, Esc — закрыть/снять цель. Shift+ЛКМ по предмету — выбросить.', 'sys');
+      this.log('Управление: WASD — бег, Пробел — прыжок, зажатая мышь — поворот камеры, колесо — зум. ЛКМ по врагу или Tab — выбрать цель (автоатака). 1-3 — умения, 4 — зелье здоровья, 5 — зелье маны. E — говорить/собирать. I — сумка, C — персонаж, L — задания, Esc — закрыть/снять цель. Shift+ЛКМ по предмету — выбросить. /who — кто в игре. Enter — чат со всеми игроками.', 'sys');
     } else if (msg === '/where') {
       const p = this.g.player.pos;
       this.log(`Координаты: ${p.x.toFixed(0)}, ${p.z.toFixed(0)} — ${this.g.zone}`, 'sys');
+    } else if (msg === '/who') {
+      const names = [this.g.player.name, ...[...this.g.remotes.values()].map((r) => r.name)];
+      this.log(`Онлайн (${names.length}): ${names.join(', ')}`, 'sys');
     } else {
-      this.log(`<b>[${esc(this.g.player.name)}]</b>: ${esc(msg)}`, 'say', true);
+      this.g.net.send({ t: 'chat', msg });
     }
   }
 
@@ -93,6 +96,11 @@ export class UI {
     el.innerHTML = `<div class="b-title">${title}</div>${sub ? `<div class="b-sub">${sub}</div>` : ''}`;
     void el.offsetWidth;
     el.classList.add('show');
+  }
+
+  disconnected(msg) {
+    $('#disconnect-msg').textContent = msg;
+    $('#disconnect-screen').classList.remove('hidden');
   }
 
   showDeath(show) {
@@ -551,6 +559,7 @@ export class UI {
 
     $('#zone-name').textContent = g.zone;
     $('#coords').textContent = `${p.pos.x.toFixed(0)}, ${p.pos.z.toFixed(0)}`;
+    $('#online').textContent = `Онлайн: ${g.remotes.size + 1}`;
 
     // закрываем диалог/магазин, если игрок отошёл
     for (const [win, npc] of [['dialog', this.dialogNpc], ['shop', this.shopNpc]]) {
@@ -590,6 +599,10 @@ export class UI {
       if (e.dead) continue;
       ctx.fillStyle = e.def.boss ? '#ff8a20' : e === g.player.target ? '#ffff60' : '#e03a30';
       dot(ctx, tx(e.pos.x), ty(e.pos.z), e.def.boss ? 5 : 2.5);
+    }
+    for (const r of g.remotes.values()) {
+      ctx.fillStyle = '#5ae0ff';
+      dot(ctx, tx(r.pos.x), ty(r.pos.z), 3.5);
     }
     for (const n of g.npcs) {
       ctx.fillStyle = '#ffd860';

@@ -209,7 +209,7 @@ export class Player {
     this.faceTarget(t);
     this.combatTimer = 6;
     const type = anim || this.cls.attackAnim;
-    playAttack(this.model, type, type === 'bow' ? 0.55 : 0.45);
+    this.anim(type, type === 'bow' ? 0.55 : 0.45);
     if (!proj) {
       g.schedule(0.22, () => {
         if (t.dead || this.dead) return;
@@ -220,7 +220,7 @@ export class Player {
     } else {
       g.schedule(type === 'bow' ? 0.3 : 0.2, () => {
         if (t.dead || this.dead) return;
-        g.fx.projectile(this.muzzle(), t, proj, () => this.dealDamage(t, mult));
+        this.shoot(t, proj, mult);
       });
     }
   }
@@ -230,14 +230,30 @@ export class Player {
     return new THREE.Vector3(this.pos.x + Math.sin(r) * 0.7, this.pos.y + 1.5, this.pos.z + Math.cos(r) * 0.7);
   }
 
-  dealDamage(t, mult) {
+  // анимация видна и другим игрокам
+  anim(type, dur) {
+    playAttack(this.model, type, dur);
+    this.game.net.send({ t: 'anim', a: type, d: dur });
+  }
+
+  shoot(t, proj, mult) {
+    this.game.fx.projectile(this.muzzle(), t, proj, () => this.dealDamage(t, mult));
+    this.game.net.send({ t: 'proj', k: proj, e: t.id });
+  }
+
+  ring(pos, r, color, dur) {
+    this.game.fx.ring(pos, r, color, dur);
+    this.game.net.send({ t: 'fx', k: 'ring', x: +pos.x.toFixed(2), z: +pos.z.toFixed(2), r, c: color });
+  }
+
+  dealDamage(t, mult, slow = 0) {
     if (t.dead) return;
     const d = this.derived();
     const base = this.cls.dmgType === 'magic' ? d.magic : d.phys;
     let dmg = base * mult * rand(0.9, 1.1);
     const crit = Math.random() < d.crit;
     if (crit) dmg *= 1.75;
-    t.takeDamage(Math.round(dmg), this, crit);
+    t.takeDamage(Math.round(dmg), this, crit, slow);
   }
 
   // ------------------------------------------------ способности
@@ -259,41 +275,40 @@ export class Player {
     switch (sk.type) {
       case 'strike':
         this.basicAttack(t, sk.mult, null);
-        g.schedule(0.22, () => g.fx.ring(t.pos, 2.2, 0xffb040, 0.4));
+        g.schedule(0.22, () => this.ring(t.pos, 2.2, 0xffb040, 0.4));
         break;
       case 'projectile':
         this.basicAttack(t, sk.mult, sk.proj);
         break;
       case 'whirl':
-        playAttack(this.model, 'spin', 0.5);
+        this.anim('spin', 0.5);
         this.combatTimer = 6;
-        g.fx.ring(fxPos, sk.radius, 0xffd080, 0.45);
+        this.ring(fxPos, sk.radius, 0xffd080, 0.45);
         g.schedule(0.2, () => {
           for (const e of g.enemiesNear(this.pos, sk.radius)) this.dealDamage(e, sk.mult);
         });
         break;
       case 'nova':
-        playAttack(this.model, 'cast', 0.45);
+        this.anim('cast', 0.45);
         this.combatTimer = 6;
-        g.fx.ring(fxPos, sk.radius, 0x80d0ff, 0.6);
+        this.ring(fxPos, sk.radius, 0x80d0ff, 0.6);
         g.fx.burst(fxPos.clone().setY(fxPos.y + 1), 0x9adfff, 24, 1.3);
         for (const e of g.enemiesNear(this.pos, sk.radius)) {
-          this.dealDamage(e, sk.mult);
-          e.slow = sk.slow;
+          this.dealDamage(e, sk.mult, sk.slow);
         }
         break;
       case 'volley': {
-        playAttack(this.model, 'bow', 0.5);
+        this.anim('bow', 0.5);
         this.faceTarget(t);
         this.combatTimer = 6;
         const victims = g.enemiesNear(t.pos, sk.radius);
         victims.forEach((e, n) => g.schedule(0.25 + n * 0.07, () => {
-          if (!e.dead) g.fx.projectile(this.muzzle(), e, 'arrow', () => this.dealDamage(e, sk.mult));
+          if (!e.dead) this.shoot(e, 'arrow', sk.mult);
         }));
         break;
       }
       case 'heal': {
-        playAttack(this.model, 'cast', 0.5);
+        this.anim('cast', 0.5);
         const amount = Math.round(40 + d.magic * 1.5);
         this.hp = Math.min(d.maxHp, this.hp + amount);
         g.fx.pillar(this.pos, 0x60ff90, 1);
@@ -302,7 +317,7 @@ export class Player {
       }
       case 'buff':
         this.buffs[sk.buff] = sk.duration;
-        g.fx.ring(fxPos, 3, sk.buff === 'rage' ? 0xff5030 : 0x80ffd0, 0.6);
+        this.ring(fxPos, 3, sk.buff === 'rage' ? 0xff5030 : 0x80ffd0, 0.6);
         g.fx.pillar(this.pos, sk.buff === 'rage' ? 0xff5030 : 0x80ffd0, 0.8);
         g.fx.floatText(this.headPos(), sk.name + '!', 'info');
         break;
@@ -457,6 +472,7 @@ export class Player {
 
   refreshEquipment() {
     applyEquipment(this.model, this.equipment);
+    this.game.net.send({ t: 'eq', equipment: this.equipment });
   }
 
   serialize() {

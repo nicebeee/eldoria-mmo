@@ -6,12 +6,13 @@ import { Player } from './player.js';
 import { Enemy, Npc } from './enemies.js';
 import { Input } from './input.js';
 import { UI } from './ui.js';
-import { saveAccount } from './auth.js';
+import { RemotePlayer } from './remote.js';
 import { clamp, randInt, distXZ } from './utils.js';
 
 export class Game {
-  constructor(account) {
-    this.account = account;
+  constructor(net, welcome) {
+    this.net = net;
+    this.myId = welcome.id;
     this.canvas = document.getElementById('game-canvas');
     const r = (this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' }));
     r.setPixelRatio(Math.min(devicePixelRatio, 1.75));
@@ -39,11 +40,13 @@ export class Game {
     this.timers = [];
     this.world = createWorld(scene);
     this.fx = new Effects(this);
-    this.player = new Player(this, account.save);
+    this.player = new Player(this, welcome.save);
     this.camTarget = new THREE.Vector3();
     this.npcs = NPCS.map((d) => new Npc(this, d));
-    this.enemies = [];
-    for (const z of SPAWN_ZONES) for (let i = 0; i < z.count; i++) this.enemies.push(new Enemy(this, z));
+    this.enemies = welcome.enemies.map((info) => new Enemy(this, info));
+    this.remotes = new Map();
+    for (const info of welcome.players) this.remotes.set(info.id, new RemotePlayer(this, info));
+    this.netTimer = 0;
     this.cam = { yaw: 0, pitch: 0.38, dist: 10 };
     this.camTarget.copy(this.player.pos);
     this.raycaster = new THREE.Raycaster();
@@ -54,8 +57,10 @@ export class Game {
     this.nearHerb = null;
     this.saveTimer = 0;
     this.updateNpcMarkers();
+    this.bindNet();
 
     this.ui.log(`Добро пожаловать в Эльдорию, ${this.player.name}!`, 'good');
+    this.ui.log(`На сервере игроков: ${this.remotes.size + 1}. Enter — написать в общий чат.`, 'good');
     this.ui.log('WASD — движение, мышь (зажать) — камера, ЛКМ по врагу — атака, 1-3 — умения, 4-5 — зелья, E — говорить, I/C/L — окна. /help — все клавиши.', 'sys');
 
     addEventListener('resize', () => {
@@ -89,6 +94,8 @@ export class Game {
     }
     this.player.update(dt);
     for (const e of this.enemies) e.update(dt);
+    for (const r of this.remotes.values()) r.update(dt);
+    if ((this.netTimer += dt) >= 0.1) { this.netTimer = 0; this.sendState(); }
     for (const n of this.npcs) n.update(dt);
     this.world.update(dt, this.time);
     this.updateCamera(dt);
@@ -311,7 +318,74 @@ export class Game {
   }
 
   save() {
-    this.account.save = this.player.serialize();
-    saveAccount(this.account);
+    this.net.send({ t: 'save', data: this.player.serialize() });
   }
+
+  // ------------------------------------------------ сеть
+  sendState() {
+    const p = this.player, d = p.derived(), a = p.model.userData.anim;
+    this.net.send({
+      t: 'st', x: +p.pos.x.toFixed(2), y: +p.pos.y.toFixed(2), z: +p.pos.z.toFixed(2), ry: +p.model.rotation.y.toFixed(2),
+      m: a.moving ? 1 : 0, sm: +a.speedMul.toFixed(2), hp: Math.round(p.hp), mhp: d.maxHp, dead: p.dead ? 1 : 0, lvl: p.level,
+    });
+  }
+
+  enemyById(id) {
+    return this.enemies[id];
+  }
+
+  bindNet() {
+    const net = this.net, ui = this.ui;
+    net.on('tick', (m) => {
+      const es = m.es;
+      for (let i = 0; i < es.length; i += 5) this.enemies[es[i]]?.netMove(es[i + 1], es[i + 2], es[i + 3], es[i + 4]);
+      for (const [id, x, y, z, ry, mv, sm, hp, mhp, dead] of m.ps) {
+        if (id === this.myId) continue;
+        this.remotes.get(id)?.setState(x, y, z, ry, mv, sm, hp, mhp, dead);
+      }
+    });
+    net.on('p_join', (m) => {
+      if (this.remotes.has(m.p.id)) this.remotes.get(m.p.id).dispose();
+      this.remotes.set(m.p.id, new RemotePlayer(this, m.p));
+    });
+    net.on('p_leave', (m) => {
+      this.remotes.get(m.id)?.dispose();
+      this.remotes.delete(m.id);
+    });
+    net.on('p_eq', (m) => this.remotes.get(m.id)?.setEquip(m.equip, m.level));
+    net.on('p_anim', (m) => this.remotes.get(m.id)?.anim(m.a, m.d));
+    net.on('p_proj', (m) => {
+      const r = this.remotes.get(m.id), e = this.enemies[m.e];
+      if (r && e && !e.dead) this.fx.projectile(r.muzzle(), e, m.k, () => {});
+    });
+    net.on('p_fx', (m) => {
+      if (m.k === 'ring') this.fx.ring(new THREE.Vector3(m.x, 0, m.z), m.r, m.c, 0.5);
+    });
+    net.on('e_dmg', (m) => this.enemies[m.e]?.onDamage(m.dmg, m.crit, m.hp));
+    net.on('e_hp', (m) => this.enemies[m.e]?.setHp(m.hp));
+    net.on('e_die', (m) => this.enemies[m.e]?.onDie());
+    net.on('e_spawn', (m) => this.enemies[m.e[0]]?.applyInfo(m.e));
+    net.on('e_atk', (m) => this.enemies[m.e]?.onAttack(m.a));
+    net.on('e_slam', (m) => {
+      const e = this.enemies[m.e];
+      const c = new THREE.Vector3(m.x, 0, m.z);
+      this.fx.telegraph(c, m.r, 1.2);
+      if (distXZ(c, this.player.pos) < m.r + 10) ui.error(`${e?.def.name ?? 'Босс'} готовит сокрушительный удар — отбегите!`);
+      this.schedule(0.5, () => e?.onAttack('slam'));
+      this.schedule(1.2, () => {
+        this.fx.ring(c, m.r, 0xff6030, 0.5);
+        this.fx.burst(c.clone().setY(heightAt(m.x, m.z) + 0.5), 0xc09060, 20, 1.5);
+      });
+    });
+    net.on('hurt', (m) => this.player.takeDamage(m.dmg));
+    net.on('kill', (m) => { const e = this.enemies[m.e]; if (e) this.onEnemyKilled(e); });
+    net.on('chat', (m) => ui.log(`<b>[${escapeHtml(m.from)}]</b>: ${escapeHtml(m.msg)}`, 'say', true));
+    net.on('sys', (m) => ui.log(m.msg, 'sys'));
+    net.on('kicked', (m) => ui.disconnected(m.msg));
+    net.onClose = () => ui.disconnected('Соединение с сервером потеряно');
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
-import { register, login, getLastUser, listHeroes } from './auth.js';
+import { Net } from './net.js';
 import { CLASSES, STAT_KEYS, STAT_NAMES, generateItem } from './data.js';
 import { createHumanoid, applyEquipment, animateModel, playAttack } from './models.js';
 import { Game } from './game.js';
@@ -106,45 +106,62 @@ const preview = (() => {
 })();
 
 // ------------------------------------------------ формы
+const net = new Net();
+const LAST = 'eldoria.last';
+let busy = false;
+
 function setError(e) {
   $('#auth-error').textContent = e.message || String(e);
 }
 
-$('#login-form').onsubmit = async (e) => {
-  e.preventDefault();
+async function auth(msg) {
+  if (busy) return;
+  busy = true;
+  setError('');
+  document.querySelectorAll('form .btn').forEach((b) => (b.disabled = true));
   try {
-    const acc = await login($('#login-user').value, $('#login-pass').value);
-    start(acc);
-  } catch (err) { setError(err); }
+    $('#auth-error').textContent = 'Подключение к серверу…';
+    await net.connect();
+    const res = await net.request(msg, ['welcome', 'auth_err']);
+    if (res.t === 'auth_err') throw new Error(res.msg);
+    try { localStorage.setItem(LAST, msg.name.trim()); } catch {}
+    start(res);
+  } catch (err) {
+    setError(err);
+  } finally {
+    busy = false;
+    document.querySelectorAll('form .btn').forEach((b) => (b.disabled = false));
+  }
+}
+
+$('#login-form').onsubmit = (e) => {
+  e.preventDefault();
+  auth({ t: 'login', name: $('#login-user').value, pass: $('#login-pass').value });
 };
 
-$('#register-form').onsubmit = async (e) => {
+$('#register-form').onsubmit = (e) => {
   e.preventDefault();
-  try {
-    const acc = await register($('#reg-user').value, $('#reg-pass').value, $('#reg-pass2').value, selectedClass);
-    start(acc);
-  } catch (err) { setError(err); }
+  if ($('#reg-pass').value !== $('#reg-pass2').value) return setError(new Error('Пароли не совпадают'));
+  auth({ t: 'register', name: $('#reg-user').value, pass: $('#reg-pass').value, classId: selectedClass });
 };
 
-function start(account) {
+function start(welcome) {
+  net.hold(); // сообщения копятся, пока строится мир
   preview.stop();
   $('#auth-screen').classList.add('hidden');
   $('#loading').classList.remove('hidden');
-  // даём браузеру отрисовать экран загрузки перед построением мира
   setTimeout(() => {
     $('#game').classList.remove('hidden');
-    window.game = new Game(account);
+    window.game = new Game(net, welcome);
+    net.release();
     $('#loading').classList.add('hidden');
   }, 50);
 }
 
 // ------------------------------------------------ старт
-const heroes = listHeroes();
-$('#login-user').value = getLastUser();
-if (heroes.length) {
-  $('#hero-list').innerHTML = 'Ваши герои: ' + heroes.map((h) => `<button type="button" data-n="${h.name}">${CLASSES[h.classId]?.icon ?? ''} ${h.name} <small>${h.level ?? 1} ур.</small></button>`).join('');
-  $('#hero-list').querySelectorAll('button').forEach((b) => (b.onclick = () => { $('#login-user').value = b.dataset.n; $('#login-pass').focus(); }));
-}
+let last = '';
+try { last = localStorage.getItem(LAST) || ''; } catch {}
+$('#login-user').value = last;
 preview.start();
 selectClass('warrior');
-showTab(heroes.length ? 'login' : 'register');
+showTab(last ? 'login' : 'register');

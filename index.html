@@ -71,6 +71,7 @@
         <canvas id="minimap" width="170" height="170"></canvas>
         <div id="zone-name"></div>
         <div id="coords"></div>
+        <div id="online" title="/who — список игроков"></div>
       </div>
 
       <div id="quest-tracker"></div>
@@ -89,7 +90,7 @@
 
       <div id="chat">
         <div id="chat-log"></div>
-        <input id="chat-input" placeholder="Enter — написать сообщение, /help — управление" maxlength="120" autocomplete="off" />
+        <input id="chat-input" placeholder="Enter — чат со всеми, /help — управление, /who — кто онлайн" maxlength="120" autocomplete="off" />
       </div>
 
       <div id="interact-prompt" class="hidden"></div>
@@ -125,6 +126,14 @@
         <div class="win-body">
           <div id="shop-list"></div>
           <div class="inv-foot"><span>🪙 <b id="shop-gold">0</b></span><span class="muted">ПКМ по предмету в сумке — продать</span></div>
+        </div>
+      </div>
+
+      <div id="disconnect-screen" class="hidden">
+        <div class="death-box">
+          <h2>Нет связи</h2>
+          <p id="disconnect-msg"></p>
+          <button class="btn gold big" onclick="location.reload()">Переподключиться</button>
         </div>
       </div>
 
