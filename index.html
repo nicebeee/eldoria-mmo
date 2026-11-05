@@ -129,6 +129,28 @@
         </div>
       </div>
 
+      <div class="window hidden" id="win-trade" data-win="trade">
+        <div class="win-head">Обмен <button class="close">✕</button></div>
+        <div class="win-body">
+          <div class="trade-cols">
+            <div class="trade-col">
+              <div class="tc-h">Вы предлагаете</div>
+              <div id="trade-mine" class="trade-grid"></div>
+              <div class="trade-gold">🪙 <input id="trade-gold" type="number" min="0" value="0" /></div>
+              <div id="trade-mine-ready" class="tready">✔ Готов</div>
+            </div>
+            <div class="trade-col">
+              <div class="tc-h" id="trade-name"></div>
+              <div id="trade-theirs" class="trade-grid"></div>
+              <div class="trade-gold">🪙 <b id="trade-their-gold">0</b></div>
+              <div id="trade-their-ready" class="tready">✔ Готов</div>
+            </div>
+          </div>
+          <div class="muted trade-hint">Клик по вещи в сумке — предложить. Клик по своей вещи здесь — убрать. Любое изменение снимает готовность у обоих.</div>
+          <div class="dlg-btns"><button class="btn gold" id="trade-ready-btn">Готов</button><button class="btn" id="trade-cancel-btn">Отмена</button></div>
+        </div>
+      </div>
+
       <div id="disconnect-screen" class="hidden">
         <div class="death-box">
           <h2>Нет связи</h2>

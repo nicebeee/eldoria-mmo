@@ -60,9 +60,17 @@ export class UI {
   chatCommand(msg) {
     if (msg === '/help') {
       this.log('Управление: WASD — бег, Пробел — прыжок, зажатая мышь — поворот камеры, колесо — зум. ЛКМ по врагу или Tab — выбрать цель (автоатака). 1-3 — умения, 4 — зелье здоровья, 5 — зелье маны. E — говорить/собирать. I — сумка, C — персонаж, L — задания, Esc — закрыть/снять цель. Shift+ЛКМ по предмету — выбросить. /who — кто в игре. Enter — чат со всеми игроками.', 'sys');
+      this.log('С игроками: клик по игроку — меню (группа, обмен, дуэль). Команды: /invite Имя, /trade Имя, /duel Имя, /leave — выйти из группы, /p текст — чат группы. На Арене (восток карты) можно сражаться с любым игроком.', 'sys');
     } else if (msg === '/where') {
       const p = this.g.player.pos;
       this.log(`Координаты: ${p.x.toFixed(0)}, ${p.z.toFixed(0)} — ${this.g.zone}`, 'sys');
+    } else if (/^\/(invite|trade|duel)\s+/.test(msg)) {
+      const [cmd, ...rest] = msg.slice(1).split(/\s+/);
+      this.g.social.request({ invite: 'party', trade: 'trade', duel: 'duel' }[cmd], this.g.social.findRemote(rest.join(' ')));
+    } else if (msg === '/leave') {
+      this.g.net.send({ t: 'party_leave' });
+    } else if (msg.startsWith('/p ')) {
+      this.g.net.send({ t: 'pchat', msg: msg.slice(3) });
     } else if (msg === '/who') {
       const names = [this.g.player.name, ...[...this.g.remotes.values()].map((r) => r.name)];
       this.log(`Онлайн (${names.length}): ${names.join(', ')}`, 'sys');
@@ -128,6 +136,7 @@ export class UI {
     $(`#win-${name}`).classList.add('hidden');
     if (name === 'shop') this.shopNpc = null;
     if (name === 'dialog') this.dialogNpc = null;
+    if (name === 'trade') this.g.social?.cancelTrade();
     this.hideTooltip();
   }
 
@@ -223,7 +232,10 @@ export class UI {
       h += `<div class="tt-cmp"><div class="tt-cmp-h">По сравнению с надетым:</div>${rows.length ? rows.join('') : '<div class="muted">без изменений</div>'}</div>`;
     }
     h += `<div class="tt-val">Цена продажи: ${item.value} 🪙</div>`;
-    if (where === 'inv') h += `<div class="tt-hint">ЛКМ — надеть${this.shopNpc ? ' • ПКМ — продать' : ''} • Shift+ЛКМ — выбросить</div>`;
+    if (where === 'inv' && this.g.social?.trade) h += `<div class="tt-hint">ЛКМ — предложить в обмен</div>`;
+    else if (where === 'trade-mine') h += `<div class="tt-hint">ЛКМ — убрать из обмена</div>`;
+    else if (where === 'trade') h += '';
+    else if (where === 'inv') h += `<div class="tt-hint">ЛКМ — надеть${this.shopNpc ? ' • ПКМ — продать' : ''} • Shift+ЛКМ — выбросить</div>`;
     else if (where === 'equip') h += `<div class="tt-hint">ЛКМ — снять</div>`;
     else if (where === 'shop') h += `<div class="tt-hint">ЛКМ — купить</div>`;
     return h;
@@ -245,6 +257,7 @@ export class UI {
         this.bindTip(s, () => this.itemTooltip(it, 'inv'));
         s.onclick = (e) => {
           this.hideTooltip();
+          if (this.g.social?.trade) return this.g.social.offerItem(i);
           if (e.shiftKey) {
             p.inventory[i] = null;
             this.log(`Выброшено: ${it.name}`, 'sys');
@@ -500,7 +513,8 @@ export class UI {
     if (!t || t.dead) { tf.classList.add('hidden'); return; }
     tf.classList.remove('hidden');
     tf.classList.toggle('boss', !!t.def?.boss);
-    $('#tf-name').textContent = t.def.name;
+    $('#tf-name').textContent = t.def ? t.def.name : t.name;
+    tf.classList.toggle('pvp', !!t.isRemote);
     $('#tf-level').textContent = t.level;
   }
 
@@ -601,7 +615,7 @@ export class UI {
       dot(ctx, tx(e.pos.x), ty(e.pos.z), e.def.boss ? 5 : 2.5);
     }
     for (const r of g.remotes.values()) {
-      ctx.fillStyle = '#5ae0ff';
+      ctx.fillStyle = g.social.inParty(r.id) ? '#60ff70' : '#5ae0ff';
       dot(ctx, tx(r.pos.x), ty(r.pos.z), 3.5);
     }
     for (const n of g.npcs) {

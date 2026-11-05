@@ -198,6 +198,7 @@ export class Player {
   tryAutoAttack(d) {
     const t = this.target;
     if (this.atkTimer > 0) return;
+    if (t.isRemote && !this.game.social.canAttack(t)) return;
     if (!this.inRange(t, this.cls.range)) return;
     this.atkTimer = d.interval;
     this.basicAttack(t, 1, this.cls.projectile);
@@ -238,7 +239,7 @@ export class Player {
 
   shoot(t, proj, mult) {
     this.game.fx.projectile(this.muzzle(), t, proj, () => this.dealDamage(t, mult));
-    this.game.net.send({ t: 'proj', k: proj, e: t.id });
+    this.game.net.send(t.isRemote ? { t: 'proj', k: proj, pl: t.id } : { t: 'proj', k: proj, e: t.id });
   }
 
   ring(pos, r, color, dur) {
@@ -263,7 +264,8 @@ export class Player {
     if (!sk || this.dead) return;
     if (this.cooldowns[sk.id] > 0) return this.game.ui.error('Способность ещё не готова');
     if (this.mp < sk.mana) return this.game.ui.error('Недостаточно маны');
-    const t = this.target && !this.target.dead && !this.target.isNpc ? this.target : null;
+    const tg = this.target;
+    const t = tg && !tg.dead && !tg.isNpc && (!tg.isRemote || g.social.canAttack(tg)) ? tg : null;
     const needsTarget = ['strike', 'projectile', 'volley'].includes(sk.type);
     if (needsTarget) {
       if (!t) return g.ui.error('Нет цели (кликните по врагу или нажмите Tab)');
@@ -285,7 +287,7 @@ export class Player {
         this.combatTimer = 6;
         this.ring(fxPos, sk.radius, 0xffd080, 0.45);
         g.schedule(0.2, () => {
-          for (const e of g.enemiesNear(this.pos, sk.radius)) this.dealDamage(e, sk.mult);
+          for (const e of g.hostilesNear(this.pos, sk.radius)) this.dealDamage(e, sk.mult);
         });
         break;
       case 'nova':
@@ -293,7 +295,7 @@ export class Player {
         this.combatTimer = 6;
         this.ring(fxPos, sk.radius, 0x80d0ff, 0.6);
         g.fx.burst(fxPos.clone().setY(fxPos.y + 1), 0x9adfff, 24, 1.3);
-        for (const e of g.enemiesNear(this.pos, sk.radius)) {
+        for (const e of g.hostilesNear(this.pos, sk.radius)) {
           this.dealDamage(e, sk.mult, sk.slow);
         }
         break;
@@ -301,7 +303,7 @@ export class Player {
         this.anim('bow', 0.5);
         this.faceTarget(t);
         this.combatTimer = 6;
-        const victims = g.enemiesNear(t.pos, sk.radius);
+        const victims = g.hostilesNear(t.pos, sk.radius);
         victims.forEach((e, n) => g.schedule(0.25 + n * 0.07, () => {
           if (!e.dead) this.shoot(e, 'arrow', sk.mult);
         }));
@@ -331,17 +333,29 @@ export class Player {
   }
 
   // ------------------------------------------------ урон и смерть
-  takeDamage(amount) {
-    if (this.dead) return;
+  // opts.from — id игрока-атакующего (PvP), opts.duel — урон в дуэли не убивает
+  takeDamage(amount, opts = {}) {
+    if (this.dead) return 0;
     const d = this.derived();
-    const dmg = Math.max(1, Math.round(amount * (1 - d.reduction)));
-    this.hp -= dmg;
+    let dmg = Math.max(1, Math.round(amount * (1 - d.reduction)));
     this.combatTimer = 6;
+    if (opts.duel && this.hp - dmg < 1) {
+      dmg = Math.max(0, Math.floor(this.hp - 1));
+      this.hp = 1;
+      this.game.fx.floatText(this.headPos(), '-' + dmg, 'dmg-me');
+      this.game.net.send({ t: 'duel_lost' });
+      this.game.ui.banner('Поражение', 'Вы проиграли дуэль', 'zone');
+      return dmg;
+    }
+    this.hp -= dmg;
     this.game.fx.floatText(this.headPos(), '-' + dmg, 'dmg-me');
-    if (this.hp <= 0) this.die();
+    if (this.hp <= 0) this.die(opts.from);
+    return dmg;
   }
 
-  die() {
+  die(killerId) {
+    if (killerId) this.game.net.send({ t: 'pvp_death', by: killerId });
+    if (this.game.social?.duel) this.game.net.send({ t: 'duel_lost' });
     this.hp = 0;
     this.dead = true;
     this.target = null;
@@ -475,10 +489,20 @@ export class Player {
     this.game.net.send({ t: 'eq', equipment: this.equipment });
   }
 
+  // вещи, выложенные на обмен, при сохранении считаются лежащими в сумке
+  inventoryForSave() {
+    const inv = [...this.inventory];
+    for (const it of this.game.social?.offeredItems() ?? []) {
+      const i = inv.indexOf(null);
+      if (i >= 0) inv[i] = it;
+    }
+    return inv;
+  }
+
   serialize() {
     return {
       name: this.name, classId: this.classId, level: this.level, xp: this.xp, gold: this.gold,
-      statPoints: this.statPoints, alloc: this.alloc, inventory: this.inventory, equipment: this.equipment,
+      statPoints: this.statPoints, alloc: this.alloc, inventory: this.inventoryForSave(), equipment: this.equipment,
       quests: this.quests, pos: [+this.pos.x.toFixed(2), +this.pos.z.toFixed(2)],
       hp: Math.round(this.hp), mp: Math.round(this.mp),
     };

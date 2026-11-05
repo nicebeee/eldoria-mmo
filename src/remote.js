@@ -21,6 +21,10 @@ export class RemotePlayer {
     this.plate.sprite.position.y = 2.45;
     this.model.add(this.plate.sprite);
     this.hitHeight = 1.2;
+    this.radius = 0.5;
+    this.hp = info.hp;
+    this.maxHp = info.mhp || 1;
+    this.model.userData.entity = this;
     this.dead = false;
     this.level = info.level;
     this.setEquip(info.equip, info.level);
@@ -40,11 +44,19 @@ export class RemotePlayer {
     const a = this.model.userData.anim;
     a.moving = !!m;
     a.speedMul = sm || 1;
+    this.hp = hp;
+    this.maxHp = mhp || 1;
     this.plate.draw(mhp ? Math.max(0, hp / mhp) : 1);
     if (!!dead !== this.dead) {
       this.dead = !!dead;
       setDead(this.model, this.dead);
     }
+  }
+
+  // урон по другому игроку (PvP) — его применит сам пострадавший
+  takeDamage(amount, src, crit) {
+    if (this.dead || !this.game.social.canAttack(this)) return;
+    this.game.net.send({ t: 'pvp_hit', to: this.id, dmg: Math.round(amount * 0.6), crit: crit ? 1 : 0 });
   }
 
   anim(type, dur) {

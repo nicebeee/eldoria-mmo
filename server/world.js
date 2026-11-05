@@ -2,6 +2,7 @@
 import { MOBS, SPAWN_ZONES, SLOTS } from '../src/data.js';
 import { inSafeZone } from '../src/terrain.js';
 import { rand, randInt } from '../src/utils.js';
+import { Social } from './social.js';
 
 const TICK = 1 / 20;
 const LEASH = 38;
@@ -214,11 +215,13 @@ class SEnemy {
     this.deadTimer = 0;
     this.state = 'dead';
     w.broadcast({ t: 'e_die', e: this.id });
-    // награда всем, кто бил монстра и находится поблизости
+    // награда всем, кто бил монстра, и их группам, если они поблизости
+    const got = new Set();
     for (const pid of this.contrib.keys()) {
       const p = w.players.get(pid);
-      if (p && Math.hypot(p.x - this.x, p.z - this.z) < 80) p.send({ t: 'kill', e: this.id });
+      if (p) for (const m of w.social.mates(p)) got.add(m);
     }
+    for (const p of got) if (Math.hypot(p.x - this.x, p.z - this.z) < 80) p.send({ t: 'kill', e: this.id });
     this.contrib.clear();
   }
 }
@@ -228,6 +231,7 @@ export class World {
     this.players = new Map();
     this.enemies = [];
     this.timers = [];
+    this.social = new Social(this);
     let id = 0;
     SPAWN_ZONES.forEach((z, zi) => { for (let i = 0; i < z.count; i++) this.enemies.push(new SEnemy(this, id++, zi)); });
     this.netAcc = 0;
@@ -260,7 +264,10 @@ export class World {
   }
 
   removePlayer(id) {
-    if (!this.players.delete(id)) return;
+    const p = this.players.get(id);
+    if (!p) return;
+    this.social.onLeave(p);
+    this.players.delete(id);
     for (const e of this.enemies) if (e.target?.id === id) e.target = null;
     this.broadcast({ t: 'p_leave', id });
   }
@@ -302,7 +309,7 @@ export class World {
         this.broadcast({ t: 'p_anim', id: p.id, a: String(m.a), d: Number(m.d) || 0.5 }, p.id);
         break;
       case 'proj':
-        this.broadcast({ t: 'p_proj', id: p.id, k: String(m.k), e: m.e }, p.id);
+        this.broadcast({ t: 'p_proj', id: p.id, k: String(m.k), e: m.e, pl: m.pl }, p.id);
         break;
       case 'fx':
         this.broadcast({ t: 'p_fx', id: p.id, k: String(m.k), x: m.x, z: m.z, r: m.r, c: m.c }, p.id);
@@ -317,6 +324,8 @@ export class World {
         if (msg) this.broadcast({ t: 'chat', from: p.name, msg });
         break;
       }
+      default:
+        this.social.handle(p, m);
     }
   }
 
@@ -326,6 +335,7 @@ export class World {
       if ((t.t -= dt) <= 0) { this.timers.splice(i, 1); t.fn(); }
     }
     if (!this.players.size) return; // мир «спит», пока никого нет
+    this.social.tick();
     for (const e of this.enemies) e.update(dt);
     this.netAcc += dt;
     if (this.netAcc >= 0.1) {

@@ -7,6 +7,7 @@ import { Enemy, Npc } from './enemies.js';
 import { Input } from './input.js';
 import { UI } from './ui.js';
 import { RemotePlayer } from './remote.js';
+import { Social } from './social.js';
 import { clamp, randInt, distXZ } from './utils.js';
 
 export class Game {
@@ -52,6 +53,7 @@ export class Game {
     this.raycaster = new THREE.Raycaster();
     this.input = new Input(this);
     this.ui = new UI(this);
+    this.social = new Social(this);
     this.zone = '';
     this.nearNpc = null;
     this.nearHerb = null;
@@ -95,6 +97,7 @@ export class Game {
     this.player.update(dt);
     for (const e of this.enemies) e.update(dt);
     for (const r of this.remotes.values()) r.update(dt);
+    this.social.update(dt);
     if ((this.netTimer += dt) >= 0.1) { this.netTimer = 0; this.sendState(); }
     for (const n of this.npcs) n.update(dt);
     this.world.update(dt, this.time);
@@ -108,7 +111,7 @@ export class Game {
 
     const zn = zoneNameAt(p.x, p.z);
     if (zn !== this.zone) {
-      if (this.zone) this.ui.banner(zn, '', 'zone');
+      if (this.zone) this.ui.banner(zn, zn === 'Арена' ? 'Здесь игроки могут сражаться друг с другом!' : '', 'zone');
       this.zone = zn;
     }
     this.findInteractables();
@@ -171,14 +174,17 @@ export class Game {
   onClick(x, y) {
     const ndc = new THREE.Vector2((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
-    const objs = [...this.enemies.filter((e) => !e.dead).map((e) => e.model), ...this.npcs.map((n) => n.model)];
+    const objs = [...this.enemies.filter((e) => !e.dead).map((e) => e.model), ...this.npcs.map((n) => n.model), ...[...this.remotes.values()].map((r) => r.model)];
     const hits = this.raycaster.intersectObjects(objs, true);
     for (const h of hits) {
       let o = h.object;
       while (o && !o.userData.entity) o = o.parent;
       if (!o) continue;
       const ent = o.userData.entity;
-      if (ent.isNpc) {
+      if (ent.isRemote) {
+        if (this.social.canAttack(ent)) this.player.setTarget(ent);
+        this.social.openMenu(ent, x, y);
+      } else if (ent.isNpc) {
         if (distXZ(ent.pos, this.player.pos) < 5) this.ui.openDialog(ent);
         else this.ui.error('Подойдите ближе, чтобы поговорить');
       } else {
@@ -190,7 +196,7 @@ export class Game {
 
   targetNearest() {
     const p = this.player;
-    const list = this.enemies
+    const list = [...this.enemies, ...[...this.remotes.values()].filter((r) => this.social.canAttack(r))]
       .filter((e) => !e.dead && distXZ(e.pos, p.pos) < 30)
       .sort((a, b) => distXZ(a.pos, p.pos) - distXZ(b.pos, p.pos));
     if (!list.length) return this.ui.error('Рядом нет врагов');
@@ -217,6 +223,12 @@ export class Game {
 
   enemiesNear(pos, radius) {
     return this.enemies.filter((e) => !e.dead && distXZ(e.pos, pos) <= radius + e.radius);
+  }
+
+  // враги и игроки, которых сейчас можно бить (дуэль/арена)
+  hostilesNear(pos, radius) {
+    const pvp = [...this.remotes.values()].filter((r) => this.social.canAttack(r) && distXZ(r.pos, pos) <= radius + r.radius);
+    return [...this.enemiesNear(pos, radius), ...pvp];
   }
 
   // ------------------------------------------------ награды и задания
@@ -349,13 +361,16 @@ export class Game {
       this.remotes.set(m.p.id, new RemotePlayer(this, m.p));
     });
     net.on('p_leave', (m) => {
-      this.remotes.get(m.id)?.dispose();
+      const r = this.remotes.get(m.id);
+      if (r && this.player.target === r) this.player.setTarget(null);
+      r?.dispose();
       this.remotes.delete(m.id);
     });
     net.on('p_eq', (m) => this.remotes.get(m.id)?.setEquip(m.equip, m.level));
     net.on('p_anim', (m) => this.remotes.get(m.id)?.anim(m.a, m.d));
     net.on('p_proj', (m) => {
-      const r = this.remotes.get(m.id), e = this.enemies[m.e];
+      const r = this.remotes.get(m.id);
+      const e = m.pl != null ? (m.pl === this.myId ? this.player : this.remotes.get(m.pl)) : this.enemies[m.e];
       if (r && e && !e.dead) this.fx.projectile(r.muzzle(), e, m.k, () => {});
     });
     net.on('p_fx', (m) => {
@@ -379,7 +394,7 @@ export class Game {
     });
     net.on('hurt', (m) => this.player.takeDamage(m.dmg));
     net.on('kill', (m) => { const e = this.enemies[m.e]; if (e) this.onEnemyKilled(e); });
-    net.on('chat', (m) => ui.log(`<b>[${escapeHtml(m.from)}]</b>: ${escapeHtml(m.msg)}`, 'say', true));
+    net.on('chat', (m) => ui.log(`${m.party ? '[Группа] ' : ''}<b>[${escapeHtml(m.from)}]</b>: ${escapeHtml(m.msg)}`, m.party ? 'party' : 'say', true));
     net.on('sys', (m) => ui.log(m.msg, 'sys'));
     net.on('kicked', (m) => ui.disconnected(m.msg));
     net.onClose = () => ui.disconnected('Соединение с сервером потеряно');

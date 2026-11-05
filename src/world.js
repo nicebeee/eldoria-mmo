@@ -3,7 +3,7 @@ import { SPAWN_ZONES } from './data.js';
 import { mat, box } from './models.js';
 import { clamp, smoothstep, mulberry32 } from './utils.js';
 
-import { heightAt, WORLD_HALF, VILLAGE_RADIUS } from './terrain.js';
+import { heightAt, WORLD_HALF, VILLAGE_RADIUS, ARENA, ARENA_RADIUS } from './terrain.js';
 export { heightAt, zoneNameAt, WORLD_HALF, VILLAGE_RADIUS } from './terrain.js';
 
 const GRAVE = [25, -88], ORC = [-85, -68], GOBLIN = [-62, 55], WOLF = [55, 45], BOSS = [-112, -112];
@@ -13,7 +13,7 @@ function segDist(px, pz, ax, az, bx, bz) {
   const t = clamp(((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz), 0, 1);
   return Math.hypot(px - (ax + dx * t), pz - (az + dz * t));
 }
-const PATHS = SPAWN_ZONES.map((z) => [0, 0, z.center[0], z.center[1]]);
+const PATHS = [...SPAWN_ZONES.map((z) => [0, 0, z.center[0], z.center[1]]), [0, 0, ARENA[0], ARENA[1]]];
 function pathDist(x, z) {
   let m = Infinity;
   for (const p of PATHS) m = Math.min(m, segDist(x, z, ...p));
@@ -52,7 +52,7 @@ export function createWorld(scene) {
   const col = new THREE.Color();
   const C = {
     grassA: new THREE.Color(0x5a8c38), grassB: new THREE.Color(0x7eab48), dirt: new THREE.Color(0x9a7a50),
-    rock: new THREE.Color(0x7d7a72), grave: new THREE.Color(0x4a5444), ash: new THREE.Color(0x6b5a45), forest: new THREE.Color(0x3f6e2c),
+    rock: new THREE.Color(0x7d7a72), grave: new THREE.Color(0x4a5444), ash: new THREE.Color(0x6b5a45), forest: new THREE.Color(0x3f6e2c), sand: new THREE.Color(0xc8a868),
   };
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
@@ -67,6 +67,8 @@ export function createWorld(scene) {
     if (doc < 26) col.lerp(C.ash, smoothstep(26, 12, doc));
     const db = Math.hypot(x - BOSS[0], z - BOSS[1]);
     if (db < 22) col.lerp(C.ash, smoothstep(22, 10, db) * 0.8);
+    const da = Math.hypot(x - ARENA[0], z - ARENA[1]);
+    if (da < ARENA_RADIUS + 3) col.lerp(C.sand, smoothstep(ARENA_RADIUS + 3, ARENA_RADIUS - 1, da));
     const dv = Math.hypot(x, z);
     if (dv < 20) col.lerp(C.dirt, smoothstep(20, 6, dv) * 0.8);
     const pd = pathDist(x, z);
@@ -97,7 +99,7 @@ export function createWorld(scene) {
     if (Math.hypot(x, z) < 34 || pathDist(x, z) < 4.5) continue;
     let dens = 0.16;
     if (near(x, z, WOLF, 34)) dens = 0.55;
-    if (near(x, z, GOBLIN, 14) || near(x, z, ORC, 22) || near(x, z, BOSS, 20)) dens = 0;
+    if (near(x, z, GOBLIN, 14) || near(x, z, ORC, 22) || near(x, z, BOSS, 20) || near(x, z, ARENA, ARENA_RADIUS + 10)) dens = 0;
     const inGrave = near(x, z, GRAVE, 24);
     if (inGrave) dens = 0.05;
     if (Math.max(Math.abs(x), Math.abs(z)) > 128) dens = 0.45;
@@ -131,7 +133,7 @@ export function createWorld(scene) {
   let nr = 0;
   for (let i = 0; i < 2000 && nr < 220; i++) {
     const x = (rnd() * 2 - 1) * (WORLD_HALF - 2), z = (rnd() * 2 - 1) * (WORLD_HALF - 2);
-    if (Math.hypot(x, z) < 30 || pathDist(x, z) < 3.5) continue;
+    if (Math.hypot(x, z) < 30 || pathDist(x, z) < 3.5 || near(x, z, ARENA, ARENA_RADIUS + 6)) continue;
     if (rnd() > 0.3) continue;
     const big = Math.max(Math.abs(x), Math.abs(z)) > 125;
     const sc = big ? 2 + rnd() * 4 : 0.3 + rnd() * 1.1;
@@ -248,7 +250,7 @@ export function createWorld(scene) {
 
   // частокол вокруг деревни с проходами к тропам
   const palis = mat(0x6a4a2a);
-  const gapAngles = SPAWN_ZONES.map((z) => Math.atan2(z.center[1], z.center[0]));
+  const gapAngles = [...SPAWN_ZONES.map((z) => Math.atan2(z.center[1], z.center[0])), Math.atan2(ARENA[1], ARENA[0])];
   for (let i = 0; i < 120; i++) {
     const a = (i / 120) * Math.PI * 2;
     if (gapAngles.some((g) => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g))) < 0.13)) continue;
@@ -339,6 +341,54 @@ export function createWorld(scene) {
   const bossLight = new THREE.PointLight(0xff3010, 15, 30, 1.4);
   bossLight.position.set(BOSS[0], 4, BOSS[1]);
   scene.add(bossLight);
+
+  // ------------------------------------------------ арена (PvP)
+  {
+    const [ax, az] = ARENA;
+    const stoneM = mat(0x9a8f80), clothM = mat(0xa02020), gold = mat(0xd4a83a, { metalness: 0.6, roughness: 0.35 });
+    const toVillage = Math.atan2(-az, -ax);
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2;
+      if (Math.abs(Math.atan2(Math.sin(a - toVillage), Math.cos(a - toVillage))) < 0.2) continue;
+      const g = new THREE.Group();
+      g.add(box(1, i % 2 ? 2.2 : 3.4, 1, stoneM, 0, i % 2 ? 1.1 : 1.7, 0));
+      if (i % 2 === 0) g.add(box(1.3, 0.3, 1.3, stoneM, 0, 3.5, 0));
+      place(g, ax + Math.cos(a) * (ARENA_RADIUS + 1), az + Math.sin(a) * (ARENA_RADIUS + 1), -a, 0.8);
+    }
+    // флаги и жаровни у входа и по кругу
+    for (let i = 0; i < 4; i++) {
+      const a = toVillage + (i < 2 ? (i ? 0.32 : -0.32) : Math.PI + (i === 2 ? 0.6 : -0.6));
+      const g = new THREE.Group();
+      g.add(box(0.2, 6, 0.2, mat(0x3a2a1a), 0, 3, 0));
+      g.add(box(0.06, 2.2, 1.3, clothM, 0, 4.6, 0.7));
+      g.add(box(0.5, 0.5, 0.5, gold, 0, 6.1, 0));
+      place(g, ax + Math.cos(a) * (ARENA_RADIUS + 3), az + Math.sin(a) * (ARENA_RADIUS + 3), -a, 0.4);
+    }
+    const fireM = new THREE.MeshBasicMaterial({ color: 0xff8030 });
+    const flames = [];
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const g = new THREE.Group();
+      g.add(box(0.9, 1.2, 0.9, mat(0x3a3a40), 0, 0.6, 0));
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.9, 6), fireM);
+      f.position.y = 1.6;
+      g.add(f);
+      flames.push(f);
+      place(g, ax + Math.cos(a) * (ARENA_RADIUS - 2), az + Math.sin(a) * (ARENA_RADIUS - 2), 0, 0.7);
+      f.castShadow = false;
+    }
+    const emblem = new THREE.Mesh(new THREE.RingGeometry(3, 3.4, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x8a2020 }));
+    emblem.position.set(ax, heightAt(ax, az) + 0.05, az);
+    scene.add(emblem);
+    const cross = new THREE.Group();
+    for (const r of [0.6, -0.6]) {
+      const b = box(0.2, 0.08, 5, mat(0x8a2020), 0, 0.06, 0);
+      b.rotation.y = r;
+      cross.add(b);
+    }
+    place(cross, ax, az, 0, 0);
+    updaters.push((dt, t) => flames.forEach((f, i) => (f.scale.y = 0.9 + Math.sin(t * 10 + i) * 0.2)));
+  }
 
   // ------------------------------------------------ лунник (травы для задания)
   const herbs = [];
