@@ -80,6 +80,7 @@
         <button id="btn-char" data-open="character" title="Персонаж (C)">🛡️<kbd>C</kbd></button>
         <button data-open="inventory" title="Сумка (I)">🎒<kbd>I</kbd></button>
         <button data-open="quests" title="Задания (L)">📜<kbd>L</kbd></button>
+        <button data-open="skills" title="Умения (K)">📖<kbd>K</kbd></button>
         <button id="btn-exit" title="Сохранить и выйти">🚪</button>
       </div>
 
@@ -127,6 +128,11 @@
           <div id="shop-list"></div>
           <div class="inv-foot"><span>🪙 <b id="shop-gold">0</b></span><span class="muted">ПКМ по предмету в сумке — продать</span></div>
         </div>
+      </div>
+
+      <div class="window hidden" id="win-skills" data-win="skills">
+        <div class="win-head">Умения <button class="close">✕</button></div>
+        <div class="win-body" id="skills-body"></div>
       </div>
 
       <div class="window hidden" id="win-trade" data-win="trade">

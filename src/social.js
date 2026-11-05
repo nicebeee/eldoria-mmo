@@ -121,7 +121,9 @@ export class Social {
       if (r && this.me.target === r) this.me.setTarget(null);
     });
     net.on('pvp_hurt', (m) => {
-      const dmg = this.me.takeDamage(m.dmg, { from: m.from, duel: !!m.duel && this.duel?.active });
+      const duel = !!m.duel && this.duel?.active;
+      const dmg = this.me.takeDamage(m.dmg, { from: m.from, duel, pierce: !!m.fx?.pierce, dot: !!m.dot });
+      if (m.fx) this.me.applyFx(m.fx, m.from);
       net.send({ t: 'pvp_took', to: m.from, dmg, crit: m.crit });
     });
     net.on('pvp_dmg', (m) => {

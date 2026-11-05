@@ -65,7 +65,7 @@ export class Game {
     this.ui.log(`Добро пожаловать в Эльдорию, ${this.player.name}!`, 'good');
     this.ui.log(`На сервере игроков: ${this.remotes.size + 1}. Enter — написать в общий чат.`, 'good');
     if (welcome.admin) this.ui.log('Вы администратор. Команды: /max_item [имя] — легендарный комплект, /max_stat [имя] — максимальный уровень и характеристики. Без имени — себе. Можно и так: /max_stat_Имя', 'quest');
-    this.ui.log('WASD — движение, мышь (зажать) — камера, ЛКМ по врагу — атака, 1-3 — умения, 4-5 — зелья, E — говорить, I/C/L — окна. /help — все клавиши.', 'sys');
+    this.ui.log('WASD — движение, мышь (зажать) — камера, ЛКМ по врагу — атака, 1-5 — умения, 6-7 — зелья, K — выбор умений, E — говорить, I/C/L — окна. /help — все клавиши.', 'sys');
 
     addEventListener('resize', () => {
       this.camera.aspect = innerWidth / innerHeight;
@@ -158,8 +158,11 @@ export class Game {
       case 'Digit1': p.useSkill(0); break;
       case 'Digit2': p.useSkill(1); break;
       case 'Digit3': p.useSkill(2); break;
-      case 'Digit4': p.usePotion('hp'); break;
-      case 'Digit5': p.usePotion('mp'); break;
+      case 'Digit4': p.useSkill(3); break;
+      case 'Digit5': p.useSkill(4); break;
+      case 'Digit6': p.usePotion('hp'); break;
+      case 'Digit7': p.usePotion('mp'); break;
+      case 'KeyK': ui.toggle('skills'); break;
       case 'Tab': this.targetNearest(); break;
       case 'KeyE': this.interact(); break;
       case 'KeyI': case 'KeyB': ui.toggle('inventory'); break;
@@ -377,8 +380,11 @@ export class Game {
     });
     net.on('p_fx', (m) => {
       if (m.k === 'ring') this.fx.ring(new THREE.Vector3(m.x, 0, m.z), m.r, m.c, 0.5);
+      if (m.k === 'tele') this.fx.telegraph(new THREE.Vector3(m.x, 0, m.z), m.r, 1);
+      if (m.k === 'cc') this.remotes.get(m.id)?.showCC(m.c, m.r);
     });
-    net.on('e_dmg', (m) => this.enemies[m.e]?.onDamage(m.dmg, m.crit, m.hp));
+    net.on('e_dmg', (m) => this.enemies[m.e]?.onDamage(m.dmg, m.crit, m.hp, m.dot));
+    net.on('e_cc', (m) => this.enemies[m.e]?.onCC(m.k, m.d));
     net.on('e_hp', (m) => this.enemies[m.e]?.setHp(m.hp));
     net.on('e_die', (m) => this.enemies[m.e]?.onDie());
     net.on('e_spawn', (m) => this.enemies[m.e[0]]?.applyInfo(m.e));
@@ -394,7 +400,7 @@ export class Game {
         this.fx.burst(c.clone().setY(heightAt(m.x, m.z) + 0.5), 0xc09060, 20, 1.5);
       });
     });
-    net.on('hurt', (m) => this.player.takeDamage(m.dmg));
+    net.on('hurt', (m) => this.player.takeDamage(m.dmg, { enemy: m.e }));
     net.on('admin_apply', (m) => {
       this.player.applyAdmin(m.cmd, m.items);
       if (m.by !== this.player.name) ui.log(`Администратор ${m.by} выдал вам ${m.cmd === 'max_item' ? 'легендарный комплект' : 'максимальные характеристики'}!`, 'good');

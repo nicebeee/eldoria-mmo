@@ -1,5 +1,6 @@
 // Взаимодействие игроков: группы, обмен вещами, дуэли и PvP на арене
 import { inArena } from '../src/terrain.js';
+import { sanitizeFx } from '../src/data.js';
 
 const REQ_TTL = 30000;
 const PARTY_MAX = 5;
@@ -232,7 +233,7 @@ export class Social {
     const to = this.get(m.to);
     if (!to || to.dead || p.dead || !this.canHit(p, to)) return;
     const duel = p.duel && p.duel === to.duel ? 1 : 0;
-    to.send({ t: 'pvp_hurt', from: p.id, dmg: Math.min(5000, Math.max(0, num(m.dmg))), crit: m.crit ? 1 : 0, duel });
+    to.send({ t: 'pvp_hurt', from: p.id, dmg: Math.min(5000, Math.max(0, num(m.dmg))), crit: m.crit ? 1 : 0, duel, fx: sanitizeFx(m.fx), dot: m.dot ? 1 : 0 });
   }
 
   onLeave(p) {

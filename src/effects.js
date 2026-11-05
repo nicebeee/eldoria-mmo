@@ -36,23 +36,26 @@ export class Effects {
 
   projectile(from, target, kind, onHit) {
     let obj, speed, color;
-    if (kind === 'arrow' || kind === 'bigarrow') {
+    const ARROWS = { arrow: null, bigarrow: 0xffe080, icearrow: 0x80d8ff, firearrow: 0xff6020, net: 0xd8d8a0 };
+    const ORBS = { fireball: [0xff7a20, 1.6, 24], bolt: [0x9a7aff, 0.9, 30], frost: [0x80d8ff, 1.1, 28], poison: [0x60e040, 1.0, 26], wind: [0xe8f4ff, 1.4, 26] };
+    if (kind in ARROWS) {
       obj = new THREE.Group();
       obj.add(new THREE.Mesh(shaftGeo, new THREE.MeshBasicMaterial({ color: 0x8a6a3a })));
-      const tip = new THREE.Mesh(tipGeo, new THREE.MeshBasicMaterial({ color: 0xdddddd }));
+      const tip = new THREE.Mesh(tipGeo, new THREE.MeshBasicMaterial({ color: ARROWS[kind] ?? 0xdddddd }));
       tip.position.z = 0.45;
       obj.add(tip);
       speed = 40;
-      color = 0xffffff;
-      if (kind === 'bigarrow') { obj.scale.setScalar(1.6); obj.add(this.glowSprite(0xffe080, 0.8)); color = 0xffe080; }
+      color = ARROWS[kind] ?? 0xffffff;
+      if (ARROWS[kind]) obj.add(this.glowSprite(ARROWS[kind], kind === 'net' ? 1.4 : 0.8));
+      if (kind === 'bigarrow') obj.scale.setScalar(1.6);
     } else {
-      const fire = kind === 'fireball';
-      color = fire ? 0xff7a20 : 0x9a7aff;
-      obj = this.glowSprite(color, fire ? 1.6 : 0.9);
-      const core = new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({ color: fire ? 0xffe080 : 0xe0d8ff }));
-      core.scale.setScalar(fire ? 1.3 : 0.7);
+      const [c, size, spd] = ORBS[kind] || ORBS.bolt;
+      color = c;
+      obj = this.glowSprite(color, size);
+      const core = new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      core.scale.setScalar(size * 0.6);
       obj.add(core);
-      speed = fire ? 24 : 30;
+      speed = spd;
     }
     obj.position.copy(from);
     const tp = new THREE.Vector3(), dir = new THREE.Vector3();
@@ -66,14 +69,14 @@ export class Effects {
       const step = speed * dt;
       if (d <= step + 0.35) {
         onHit();
-        this.burst(tp, color, kind === 'fireball' ? 16 : 7, kind === 'fireball' ? 1.2 : 0.6);
+        this.burst(tp, color, kind === 'fireball' ? 16 : 8, kind === 'fireball' ? 1.2 : 0.7);
         return false;
       }
       obj.position.addScaledVector(dir.normalize(), step);
       if (obj.isGroup) obj.lookAt(tp);
       else if ((trail += dt) > 0.03) {
         trail = 0;
-        this.fade(obj.position, color, kind === 'fireball' ? 0.9 : 0.5, 0.3);
+        this.fade(obj.position, color, kind === 'fireball' || kind === 'wind' ? 0.9 : 0.5, 0.3);
       }
     });
   }

@@ -1,5 +1,5 @@
 // Серверная симуляция общего мира: монстры, их ИИ, урон и награды
-import { MOBS, SPAWN_ZONES, SLOTS } from '../src/data.js';
+import { MOBS, SPAWN_ZONES, SLOTS, sanitizeFx } from '../src/data.js';
 import { inSafeZone } from '../src/terrain.js';
 import { rand, randInt } from '../src/utils.js';
 import { Social } from './social.js';
@@ -47,7 +47,7 @@ class SEnemy {
     this.atkTimer = 0;
     this.wanderTimer = rand(1, 6);
     this.wx = this.x; this.wz = this.z;
-    this.slow = 0;
+    this.resetEffects();
     this.specialTimer = 6;
     this.target = null;
     this.moving = false;
@@ -95,10 +95,14 @@ class SEnemy {
       return;
     }
     this.atkTimer -= dt;
-    this.slow -= dt;
-    const spd = this.def.speed * (this.slow > 0 ? 0.5 : 1);
+    this.ccImmune -= dt;
+    this.tickEffects(dt);
+    if (this.dead) return;
+    const spd = this.def.speed * (this.slow > 0 ? 1 - this.slowPct : 1);
     const distHome = Math.hypot(this.x - this.hx, this.z - this.hz);
     this.moving = false;
+    // оглушён/подброшен/заморожен — ничего не делает
+    if (this.stun > 0) return;
 
     switch (this.state) {
       case 'idle':
@@ -128,8 +132,10 @@ class SEnemy {
         if (!p || distHome > LEASH) { this.state = 'return'; this.target = null; break; }
         const dp = Math.hypot(p.x - this.x, p.z - this.z);
         if (dp > this.def.range + 0.25) {
-          this.moveTo(p.x, p.z, spd, dt);
-          this.moving = true;
+          if (this.root <= 0) {
+            this.moveTo(p.x, p.z, spd, dt);
+            this.moving = true;
+          }
         } else {
           this.ry = Math.atan2(p.x - this.x, p.z - this.z);
           if (this.def.boss) this.specialTimer -= dt;
@@ -195,17 +201,80 @@ class SEnemy {
     });
   }
 
-  hit(p, dmg, crit, slow) {
+  hit(p, dmg, crit, rawFx) {
     if (this.dead) return;
     const w = this.world;
-    dmg = Math.max(1, Math.round(Math.min(dmg, 100000) * (1 - this.armor / (this.armor + 80))));
+    const fx = sanitizeFx(rawFx);
+    const armorMul = fx?.pierce ? 1 : 1 - this.armor / (this.armor + 80);
+    const vulnMul = this.vuln.t > 0 ? 1 + this.vuln.p : 1;
+    dmg = Math.max(1, Math.round(Math.min(dmg, 100000) * armorMul * vulnMul));
     this.hp -= dmg;
     this.contrib.set(p.id, (this.contrib.get(p.id) || 0) + dmg);
-    if (slow) this.slow = Math.min(slow, 6);
     if (this.state !== 'return' && this.state !== 'chase') { this.state = 'chase'; this.target = p; }
     if (this.state === 'chase' && !this.validTarget(this.target)) this.target = p;
     w.broadcast({ t: 'e_dmg', e: this.id, dmg, crit: crit ? 1 : 0, hp: Math.max(0, Math.round(this.hp)), by: p.id });
-    if (this.hp <= 0) this.die();
+    if (this.hp <= 0) return this.die();
+    if (fx) this.applyFx(p, fx);
+  }
+
+  // ------------------------------------------------ эффекты умений
+  resetEffects() {
+    this.slow = 0; this.slowPct = 0; this.slowEnd = 0;
+    this.stun = 0; this.root = 0; this.ccImmune = 0;
+    this.dots = [];
+    this.vuln = { p: 0, t: 0 };
+  }
+
+  cc(kind, d) {
+    // босса можно контролить вдвое короче и не чаще раза в 4 сек
+    if (this.def.boss) {
+      if (this.ccImmune > 0) return;
+      d *= 0.5;
+      this.ccImmune = 4;
+    }
+    if (kind === 'root') this.root = Math.max(this.root, d);
+    else this.stun = Math.max(this.stun, d);
+    this.world.broadcast({ t: 'e_cc', e: this.id, k: kind, d });
+  }
+
+  applyFx(p, fx) {
+    if (fx.slow && fx.slow[1] > 0) {
+      this.slow = Math.max(this.slow, fx.slow[1]);
+      this.slowPct = fx.slow[0];
+      this.slowEnd = fx.slow[2] || 0;
+    }
+    for (const k of ['stun', 'knock', 'freeze', 'root']) if (fx[k]) this.cc(k, fx[k]);
+    if (fx.dot && fx.dot.d > 0) {
+      const pctDmg = fx.dot.pct ? Math.min(fx.dot.pct * this.maxHp, fx.dot.dps * 3 + 20) : 0;
+      this.dots.push({ dps: fx.dot.dps + pctDmg, t: fx.dot.d, acc: 0, by: p.id });
+    }
+    if (fx.vuln) this.vuln = { p: fx.vuln[0], t: fx.vuln[1] };
+  }
+
+  tickEffects(dt) {
+    const w = this.world;
+    if (this.stun > 0) this.stun -= dt;
+    if (this.root > 0) this.root -= dt;
+    if (this.vuln.t > 0) this.vuln.t -= dt;
+    if (this.slow > 0) {
+      this.slow -= dt;
+      // ледяная стрела: в конце замедления — заморозка
+      if (this.slow <= 0 && this.slowEnd > 0) { const d = this.slowEnd; this.slowEnd = 0; this.cc('freeze', d); }
+    }
+    for (let i = this.dots.length - 1; i >= 0; i--) {
+      const d = this.dots[i];
+      d.t -= dt;
+      d.acc += dt;
+      if (d.acc >= 1) {
+        d.acc -= 1;
+        const dmg = Math.max(1, Math.round(d.dps * (this.vuln.t > 0 ? 1 + this.vuln.p : 1)));
+        this.hp -= dmg;
+        this.contrib.set(d.by, (this.contrib.get(d.by) || 0) + dmg);
+        w.broadcast({ t: 'e_dmg', e: this.id, dmg, dot: 1, hp: Math.max(0, Math.round(this.hp)), by: d.by });
+        if (this.hp <= 0) { this.die(); return; }
+      }
+      if (d.t <= 0) this.dots.splice(i, 1);
+    }
   }
 
   die() {
@@ -316,7 +385,7 @@ export class World {
         break;
       case 'hit': {
         const e = this.enemies[m.e];
-        if (e) e.hit(p, Number(m.dmg) || 0, m.crit, Number(m.slow) || 0);
+        if (e) e.hit(p, Number(m.dmg) || 0, m.crit, m.fx);
         break;
       }
       case 'chat': {

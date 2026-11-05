@@ -1,5 +1,5 @@
 import {
-  CLASSES, SLOTS, SLOT_NAMES, STAT_KEYS, STAT_NAMES, STAT_DESC, RARITIES, WEAPON_NAMES, WEAPON_CLASS,
+  CLASSES, SLOTS, SLOT_NAMES, SKILL_SLOTS, CC_NAMES, STAT_KEYS, STAT_NAMES, STAT_DESC, RARITIES, WEAPON_NAMES, WEAPON_CLASS,
   QUESTS, NPCS, MOBS, SPAWN_ZONES, SHOP_POTIONS, xpForLevel, generateItem, makePotion, MAX_LEVEL,
 } from './data.js';
 import { itemIcon, SLOT_PLACEHOLDER } from './icons.js';
@@ -59,7 +59,7 @@ export class UI {
 
   chatCommand(msg) {
     if (msg === '/help') {
-      this.log('Управление: WASD — бег, Пробел — прыжок, зажатая мышь — поворот камеры, колесо — зум. ЛКМ по врагу или Tab — выбрать цель (автоатака). 1-3 — умения, 4 — зелье здоровья, 5 — зелье маны. E — говорить/собирать. I — сумка, C — персонаж, L — задания, Esc — закрыть/снять цель. Shift+ЛКМ по предмету — выбросить. /who — кто в игре. Enter — чат со всеми игроками.', 'sys');
+      this.log('Управление: WASD — бег, Пробел — прыжок, зажатая мышь — поворот камеры, колесо — зум. ЛКМ по врагу или Tab — выбрать цель (автоатака). 1-5 — умения, 6 — зелье здоровья, 7 — зелье маны, K — выбор умений. E — говорить/собирать. I — сумка, C — персонаж, L — задания, Esc — закрыть/снять цель. Shift+ЛКМ по предмету — выбросить. /who — кто в игре. Enter — чат со всеми игроками.', 'sys');
       this.log('С игроками: клик по игроку — меню (группа, обмен, дуэль). Команды: /invite Имя, /trade Имя, /duel Имя, /leave — выйти из группы, /p текст — чат группы. На Арене (восток карты) можно сражаться с любым игроком.', 'sys');
     } else if (msg === '/where') {
       const p = this.g.player.pos;
@@ -177,6 +177,7 @@ export class UI {
     this.renderCharacter();
     this.renderQuests();
     this.renderTracker();
+    this.renderSkills();
     if (this.shopNpc) this.renderShop();
     $('#btn-char').classList.toggle('alert', this.g.player.statPoints > 0);
   }
@@ -212,7 +213,7 @@ export class UI {
     const p = this.g.player;
     if (item.type === 'potion') {
       return `<div class="tt-name">${item.name}</div><div class="tt-sub">Расходуемое • ${item.count} шт.</div>
-        <div>${item.desc}</div><div class="tt-hint">ЛКМ — выпить (клавиша ${item.potion === 'hp' ? 4 : 5})${this.shopNpc ? '<br>ПКМ — продать за 3 🪙' : ''}</div>`;
+        <div>${item.desc}</div><div class="tt-hint">ЛКМ — выпить (клавиша ${item.potion === 'hp' ? 6 : 7})${this.shopNpc ? '<br>ПКМ — продать за 3 🪙' : ''}</div>`;
     }
     const R = RARITIES[item.rarity];
     let h = `<div class="tt-name" style="color:${R.color}">${item.name}</div>
@@ -488,18 +489,67 @@ export class UI {
     const bar = $('#action-bar');
     bar.innerHTML = '';
     this.abSlots = [];
-    p.cls.skills.forEach((sk, i) => {
-      const el = this.abSlot(sk.icon, String(i + 1));
+    for (let i = 0; i < SKILL_SLOTS; i++) {
+      const sk = p.skillAt(i);
+      const el = this.abSlot(sk ? sk.icon : '', String(i + 1));
+      if (!sk) {
+        el.classList.add('empty');
+        el.onclick = () => this.openWin('skills');
+        this.bindTip(el, () => '<div class="tt-name">Пустой слот</div><div>Выберите умение в окне умений (K)</div>');
+        this.abSlots.push({ el });
+        continue;
+      }
       el.onclick = () => p.useSkill(i);
-      this.bindTip(el, () => `<div class="tt-name">${sk.name}</div><div class="tt-sub">Мана: ${sk.mana} • Перезарядка: ${sk.cd} сек</div><div>${sk.desc}</div>`);
+      this.bindTip(el, () => this.skillTip(sk));
       this.abSlots.push({ el, sk });
-    });
-    for (const [type, key] of [['hp', '4'], ['mp', '5']]) {
+    }
+    for (const [type, key] of [['hp', '6'], ['mp', '7']]) {
       const el = this.abSlot(itemIcon({ type: 'potion', potion: type }), key, true);
       el.onclick = () => p.usePotion(type);
       this.bindTip(el, () => `<div class="tt-name">${type === 'hp' ? 'Зелье здоровья' : 'Зелье маны'}</div><div>Восстанавливает 40% ${type === 'hp' ? 'здоровья' : 'маны'}. В сумке: ${p.countPotion(type)}</div>`);
       this.abSlots.push({ el, potion: type });
     }
+  }
+
+  skillTip(sk) {
+    const p = this.g.player;
+    const locked = sk.lvl > p.level;
+    return `<div class="tt-name">${sk.icon} ${sk.name}</div><div class="tt-sub">Мана: ${sk.mana} • Перезарядка: ${sk.cd} сек • с ${sk.lvl} ур.</div>
+      <div>${sk.desc}</div>${locked ? `<div class="tt-bad">Откроется на ${sk.lvl} уровне</div>` : ''}`;
+  }
+
+  // окно умений: ветки класса и 5 слотов
+  renderSkills() {
+    const p = this.g.player, body = $('#skills-body');
+    if (!body) return;
+    const slots = p.loadout.map((id, i) => {
+      const sk = id && p.cls.skills.find((s) => s.id === id);
+      return `<div class="sk-slot ${sk ? 'filled' : ''}" data-slot="${i}"><span class="sk-key">${i + 1}</span>${sk ? sk.icon : ''}</div>`;
+    }).join('');
+    const branches = p.cls.branches.map((b) => `<div class="sk-branch"><div class="sk-bh">${b.name}</div>${b.skills.map((id) => {
+      const sk = p.cls.skills.find((s) => s.id === id);
+      const locked = sk.lvl > p.level, slot = p.loadout.indexOf(id);
+      return `<div class="sk-card ${locked ? 'locked' : ''} ${slot >= 0 ? 'on' : ''}" data-id="${id}">
+        <div class="sk-ico">${sk.icon}${slot >= 0 ? `<b>${slot + 1}</b>` : ''}</div>
+        <div class="sk-txt"><div class="sk-name">${sk.name}</div><div class="sk-meta">${locked ? `🔒 с ${sk.lvl} уровня` : `${sk.mana} маны • ${sk.cd} сек`}</div></div></div>`;
+    }).join('')}</div>`).join('');
+    body.innerHTML = `<div class="sk-top"><div class="sk-slots">${slots}</div>
+      <div class="muted sk-hint">Клик по умению — поставить в свободный слот или убрать. Клик по слоту — очистить. Менять можно вне боя.</div></div>
+      <div class="sk-branches">${branches}</div>`;
+    body.querySelectorAll('.sk-card').forEach((el) => {
+      const sk = p.cls.skills.find((s) => s.id === el.dataset.id);
+      this.bindTip(el, () => this.skillTip(sk));
+      el.onclick = () => {
+        this.hideTooltip();
+        if (sk.lvl > p.level) return this.error(`Умение откроется на ${sk.lvl} уровне`);
+        const cur = p.loadout.indexOf(sk.id);
+        if (cur >= 0) return p.setSkillSlot(cur, null);
+        const free = p.loadout.indexOf(null);
+        if (free < 0) return this.error('Все 5 слотов заняты — сначала уберите умение');
+        p.setSkillSlot(free, sk.id);
+      };
+    });
+    body.querySelectorAll('.sk-slot').forEach((el) => (el.onclick = () => p.setSkillSlot(+el.dataset.slot, null)));
   }
 
   abSlot(icon, key, html = false) {
@@ -550,6 +600,7 @@ export class UI {
     for (const s of this.abSlots) {
       const cd = s.el.querySelector('.ab-cd'), cdt = s.el.querySelector('.ab-cdt');
       let rem = 0, total = 1;
+      if (!s.sk && !s.potion) continue;
       if (s.sk) {
         rem = p.cooldowns[s.sk.id] || 0;
         total = s.sk.cd;
@@ -565,9 +616,17 @@ export class UI {
       cdt.textContent = rem > 0 ? Math.ceil(rem) : '';
     }
 
+    // баффы (золотая рамка) и негативные эффекты (красная рамка)
+    const icon = (ico, t, title, bad) => `<span class="buff ${bad ? 'bad' : ''}" title="${title}">${ico}<i>${Math.ceil(t)}</i></span>`;
     const buffs = [];
-    if (p.buffs.rage > 0) buffs.push(`<span class="buff" title="Боевой клич">📯<i>${Math.ceil(p.buffs.rage)}</i></span>`);
-    if (p.buffs.haste > 0) buffs.push(`<span class="buff" title="Попутный ветер">💨<i>${Math.ceil(p.buffs.haste)}</i></span>`);
+    for (const sk of p.cls.skills) if (sk.type === 'buff' && p.buffs[sk.buff] > 0) buffs.push(icon(sk.icon, p.buffs[sk.buff], sk.name));
+    if (p.shield > 0) buffs.push(`<span class="buff" title="Щит">🔷<i>${Math.round(p.shield)}</i></span>`);
+    const ef = p.ef;
+    if (ef.stun > 0) buffs.push(icon({ stun: '💫', knock: '🌪️', freeze: '🧊' }[ef.cc] || '💫', ef.stun, CC_NAMES[ef.cc] || 'Контроль', true));
+    if (ef.root > 0) buffs.push(icon('🕸️', ef.root, 'Обездвижен', true));
+    if (ef.slow) buffs.push(icon('🐌', ef.slow.t, `Замедление ${Math.round(ef.slow.p * 100)}%`, true));
+    if (ef.dots.length) buffs.push(icon('☠️', Math.max(...ef.dots.map((d) => d.t)), 'Яд / горение', true));
+    if (ef.vuln) buffs.push(icon('🔻', ef.vuln.t, 'Метка охотника', true));
     $('#buffs').innerHTML = buffs.join('');
 
     const pr = $('#interact-prompt');

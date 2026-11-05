@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MOBS, SPAWN_ZONES } from './data.js';
+import { MOBS, SPAWN_ZONES, CC_NAMES } from './data.js';
 import { createMobModel, createNameplate, createMarker, createHumanoid, applyEquipment, animateModel, playAttack, setDead } from './models.js';
 import { heightAt } from './world.js';
 import { distXZ, lerpAngle } from './utils.js';
@@ -55,17 +55,34 @@ export class Enemy {
   }
 
   // вызывается игроком — урон отправляется на сервер
-  takeDamage(amount, src, crit, slow) {
+  takeDamage(amount, src, crit, fx) {
     if (this.dead) return;
-    this.game.net.send({ t: 'hit', e: this.id, dmg: amount, crit: crit ? 1 : 0, slow: slow || 0 });
+    this.game.net.send({ t: 'hit', e: this.id, dmg: amount, crit: crit ? 1 : 0, fx });
   }
 
-  onDamage(dmg, crit, hp) {
+  onDamage(dmg, crit, hp, dot) {
     this.hp = hp;
-    this.flash = 0.12;
+    if (!dot) this.flash = 0.12;
     const p = new THREE.Vector3(this.pos.x, this.pos.y + this.hitHeight + 0.8, this.pos.z);
-    this.game.fx.floatText(p, crit ? `${dmg}!` : String(dmg), crit ? 'crit' : 'dmg');
+    this.game.fx.floatText(p, crit ? `${dmg}!` : String(dmg), dot ? 'dot' : crit ? 'crit' : 'dmg');
     this.plate.draw(hp / this.maxHp);
+  }
+
+  // контроль от сервера: оглушение, подброс, заморозка, обездвиживание
+  onCC(kind, d) {
+    this.cc = { kind, t: d, d };
+    const p = new THREE.Vector3(this.pos.x, this.pos.y + this.hitHeight + 1.2, this.pos.z);
+    this.game.fx.floatText(p, CC_NAMES[kind] + '!', 'info');
+    if (kind === 'freeze') this.setTint(0x3080ff);
+    if (kind === 'stun') this.setTint(0x605000);
+    if (kind === 'root') this.game.fx.ring(this.pos, 1.4, 0x60c040, d);
+  }
+
+  setTint(c) {
+    for (const m of this.model.userData.mats) {
+      if (m.userData.baseEmissive === undefined) m.userData.baseEmissive = m.emissive.getHex();
+      m.emissive.setHex(c ?? m.userData.baseEmissive);
+    }
   }
 
   setHp(hp) {
@@ -108,9 +125,18 @@ export class Enemy {
     if (this.flash > 0) {
       this.flash -= dt;
       this.setFlash(this.flash);
+      if (this.flash <= 0 && this.cc?.t > 0) this.setTint(this.cc.kind === 'freeze' ? 0x3080ff : this.cc.kind === 'stun' ? 0x605000 : null);
     }
     if (this.pos.distanceToSquared(this.target) > 400) this.pos.copy(this.target);
     else this.pos.lerp(this.target, 1 - Math.exp(-10 * dt));
+    if (this.cc) {
+      this.cc.t -= dt;
+      if (this.cc.kind === 'knock' && this.cc.t > 0) {
+        this.pos.y = this.target.y + Math.sin(Math.PI * (1 - this.cc.t / this.cc.d)) * 1.8;
+        this.model.rotation.y += dt * 8;
+      }
+      if (this.cc.t <= 0) { this.cc = null; this.setTint(null); }
+    }
     this.model.rotation.y = lerpAngle(this.model.rotation.y, this.ry, 1 - Math.exp(-12 * dt));
     animateModel(this.model, dt, this.game.time);
   }

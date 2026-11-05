@@ -318,3 +318,28 @@ button.dlg-opt:hover { border-color: var(--gold); background: #2a1f1288; }
 .trade-hint { margin-top: 8px; font-size: 12px; }
 #target-frame.pvp { border-color: #ff4040; box-shadow: 0 0 18px #ff404055; }
 .ln.party { color: #8fe8ff; }
+
+/* ================= УМЕНИЯ ================= */
+#win-skills { left: 50%; top: 80px; transform: translateX(-50%); width: 720px; max-width: calc(100vw - 32px); }
+.sk-top { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.sk-slots { display: flex; gap: 6px; }
+.sk-slot { position: relative; width: 50px; height: 50px; display: grid; place-items: center; font-size: 26px; border: 1px dashed var(--gold-dim); border-radius: 6px; background: #0c0905; cursor: pointer; }
+.sk-slot.filled { border-style: solid; border-color: var(--gold); background: radial-gradient(#3a2a18, #120d08); }
+.sk-key { position: absolute; left: 3px; top: 0; font: 700 11px sans-serif; color: var(--gold-hi); }
+.sk-hint { font-size: 12px; }
+.sk-branches { display: flex; gap: 10px; }
+.sk-branch { flex: 1; min-width: 0; padding: 8px; background: #0c090588; border: 1px solid #3a2e1a; border-radius: 6px; }
+.sk-bh { margin-bottom: 6px; text-align: center; font: 700 16px var(--head); color: var(--gold); }
+.sk-card { display: flex; gap: 8px; align-items: center; padding: 5px; margin-bottom: 4px; border: 1px solid #2a2014; border-radius: 5px; cursor: pointer; transition: border-color .1s; }
+.sk-card:hover { border-color: var(--gold-dim); }
+.sk-card.on { border-color: var(--gold); background: #d4a83a1a; }
+.sk-card.locked { opacity: .45; }
+.sk-ico { position: relative; width: 38px; height: 38px; flex: none; display: grid; place-items: center; font-size: 22px; border-radius: 5px; background: radial-gradient(#3a2a18, #120d08); border: 1px solid #4a3a22; }
+.sk-ico b { position: absolute; right: -4px; top: -6px; padding: 0 4px; font-size: 10px; border-radius: 6px; background: var(--gold); color: #2a1800; }
+.sk-name { font-size: 13px; font-weight: 700; }
+.sk-meta { font-size: 11px; color: var(--muted); }
+.ab-slot.empty { opacity: .45; border-style: dashed; }
+.ab-slot:nth-child(3) { margin-right: 0; }
+.ab-slot:nth-child(5) { margin-right: 10px; }
+.buff.bad { border-color: #c03020; background: #3a0a08aa; }
+.ft.dot { color: #a0e060; font-size: 16px; }

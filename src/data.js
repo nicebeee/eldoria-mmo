@@ -23,41 +23,81 @@ export const WEAPON_CLASS = { sword: 'warrior', staff: 'mage', bow: 'archer' };
 export const CLASSES = {
   warrior: {
     id: 'warrior', name: 'Воин', icon: '⚔️',
-    desc: 'Мастер ближнего боя. Много здоровья, сокрушительные удары мечом.',
+    desc: 'Мастер ближнего боя. Много здоровья, рывок к цели, шипы и ярость берсерка.',
     base: { str: 10, agi: 5, int: 2, vit: 10 },
     dmgType: 'phys', range: 2.6, atkCd: 1.5, weapon: 'sword', attackAnim: 'melee',
     look: { skin: 0xe0ac80, shirt: 0x7a2e24, pants: 0x3a3328, boots: 0x3a2a1c, hair: 0x5a3218, beard: true },
+    branches: [
+      { name: 'Страж', skills: ['heavy', 'thorns', 'berserk', 'bash', 'unstop'] },
+      { name: 'Натиск', skills: ['whirl', 'charge', 'rage', 'quake'] },
+    ],
     skills: [
-      { id: 'heavy', name: 'Сокрушающий удар', icon: '💥', type: 'strike', mult: 2.2, cd: 5, mana: 10, desc: 'Мощный удар по цели: 220% физического урона.' },
-      { id: 'whirl', name: 'Вихрь клинков', icon: '🌀', type: 'whirl', mult: 1.4, radius: 5, cd: 9, mana: 20, desc: 'Круговой удар по всем врагам рядом: 140% урона.' },
-      { id: 'rage', name: 'Боевой клич', icon: '📯', type: 'buff', buff: 'rage', duration: 10, cd: 25, mana: 15, desc: '+30% к урону на 10 секунд.' },
+      { id: 'heavy', name: 'Сокрушающий удар', icon: '💥', lvl: 1, type: 'strike', mult: 2.2, cd: 5, mana: 10, desc: 'Мощный удар по цели: 220% урона.' },
+      { id: 'whirl', name: 'Вихрь клинков', icon: '🌀', lvl: 1, type: 'aoe_self', anim: 'spin', color: 0xffd080, mult: 1.4, radius: 5, cd: 9, mana: 20, desc: 'Круговой удар по всем врагам рядом: 140% урона.' },
+      { id: 'thorns', name: 'Шипы', icon: '🌵', lvl: 2, type: 'buff', buff: 'thorns', duration: 8, cd: 22, mana: 15, desc: '8 сек: отражает 35% полученного урона обратно атакующему.' },
+      { id: 'charge', name: 'Рывок', icon: '⚡', lvl: 3, type: 'charge', mult: 1.0, range: 20, fx: { slow: [0.5, 2] }, cd: 10, mana: 15, desc: 'Мгновенно врывается к цели (до 20 м): 100% урона и замедление на 50% на 2 сек.' },
+      { id: 'rage', name: 'Боевой клич', icon: '📯', lvl: 4, type: 'buff', buff: 'rage', duration: 10, cd: 25, mana: 15, desc: '+30% к урону на 10 сек.' },
+      { id: 'berserk', name: 'Берсерк', icon: '🩸', lvl: 5, type: 'buff', buff: 'berserk', duration: 8, cd: 30, mana: 20, desc: '8 сек: получаемый урон −40%, наносимый +20%. Очень трудно убить.' },
+      { id: 'bash', name: 'Удар щитом', icon: '🛡️', lvl: 6, type: 'strike', mult: 1.2, fx: { stun: 1.5 }, cd: 12, mana: 15, desc: '120% урона и оглушение цели на 1.5 сек.' },
+      { id: 'quake', name: 'Сотрясение земли', icon: '🌋', lvl: 8, type: 'aoe_self', anim: 'slam', color: 0xc09060, mult: 1.0, radius: 6, fx: { slow: [0.5, 3] }, cd: 14, mana: 25, desc: 'Удар по земле: 100% урона всем рядом и замедление на 50% на 3 сек.' },
+      { id: 'unstop', name: 'Неудержимость', icon: '🗿', lvl: 10, type: 'buff', buff: 'unstop', duration: 4, cleanse: true, cd: 25, mana: 20, desc: 'Снимает замедления и оглушения, 4 сек иммунитета к контролю.' },
     ],
   },
   mage: {
     id: 'mage', name: 'Маг', icon: '🔮',
-    desc: 'Повелитель стихий. Атакует издалека, мощная магия, но хрупкое тело.',
+    desc: 'Повелитель стихий. Замораживает, отравляет и подбрасывает врагов, но хрупок.',
     base: { str: 2, agi: 4, int: 12, vit: 6 },
     dmgType: 'magic', range: 18, atkCd: 1.7, weapon: 'staff', attackAnim: 'cast', projectile: 'bolt',
     look: { skin: 0xf0c8a0, shirt: 0x2c3e8f, pants: 0x22264a, boots: 0x2a2030, hair: 0xd8d8d8, beard: true, robe: true },
+    branches: [
+      { name: 'Огонь и яд', skills: ['fireball', 'poison', 'meteor'] },
+      { name: 'Лёд', skills: ['frostbolt', 'nova', 'barrier'] },
+      { name: 'Ветер', skills: ['whirlwind', 'blink', 'heal'] },
+    ],
     skills: [
-      { id: 'fireball', name: 'Огненный шар', icon: '🔥', type: 'projectile', proj: 'fireball', mult: 2.4, cd: 4, mana: 15, range: 20, desc: 'Швыряет огненный шар: 240% магического урона.' },
-      { id: 'nova', name: 'Ледяная нова', icon: '❄️', type: 'nova', mult: 1.2, radius: 7, slow: 4, cd: 10, mana: 30, desc: 'Волна холода вокруг: 120% урона и замедление на 4 сек.' },
-      { id: 'heal', name: 'Исцеление', icon: '✨', type: 'heal', cd: 15, mana: 25, desc: 'Восстанавливает здоровье (зависит от интеллекта).' },
+      { id: 'fireball', name: 'Огненный шар', icon: '🔥', lvl: 1, type: 'projectile', proj: 'fireball', mult: 2.4, cd: 4, mana: 15, range: 20, desc: 'Огненный шар: 240% магического урона.' },
+      { id: 'frostbolt', name: 'Ледяная стрела', icon: '🧊', lvl: 1, type: 'projectile', proj: 'frost', mult: 1.3, fx: { slow: [0.4, 3, 1] }, cd: 7, mana: 15, range: 20, desc: '130% урона, замедляет на 40% на 3 сек, а в конце замораживает на 1 сек.' },
+      { id: 'heal', name: 'Исцеление', icon: '✨', lvl: 2, type: 'heal', cd: 15, mana: 25, desc: 'Восстанавливает здоровье (зависит от интеллекта).' },
+      { id: 'poison', name: 'Отравление', icon: '☠️', lvl: 3, type: 'projectile', proj: 'poison', mult: 0.5, fx: { dot: [0.3, 6, 0.03] }, cd: 9, mana: 20, range: 20, desc: 'Яд: 50% урона сразу, затем 6 сек каждую секунду 3% от макс. здоровья цели и 30% маг. урона.' },
+      { id: 'whirlwind', name: 'Ветряной вихрь', icon: '🌪️', lvl: 4, type: 'projectile', proj: 'wind', mult: 1.1, fx: { knock: 1 }, cd: 12, mana: 20, range: 18, desc: '110% урона и подбрасывает цель в воздух на 1 сек.' },
+      { id: 'nova', name: 'Ледяная нова', icon: '❄️', lvl: 5, type: 'aoe_self', anim: 'cast', color: 0x80d0ff, mult: 0.8, radius: 7, fx: { freeze: 1.5 }, cd: 14, mana: 30, desc: 'Замораживает всех врагов вокруг на 1.5 сек: 80% урона.' },
+      { id: 'blink', name: 'Скачок', icon: '💫', lvl: 6, type: 'blink', dist: 10, cd: 14, mana: 15, desc: 'Телепорт на 10 м вперёд, снимает замедления и обездвиживание.' },
+      { id: 'meteor', name: 'Метеор', icon: '☄️', lvl: 8, type: 'aoe_target', mult: 2.0, radius: 5, range: 20, fx: { dot: [0.2, 3] }, cd: 15, mana: 40, desc: 'Через секунду метеор падает на область вокруг цели: 200% урона и горение 3 сек.' },
+      { id: 'barrier', name: 'Ледяной барьер', icon: '🔷', lvl: 10, type: 'buff', buff: 'barrier', duration: 10, cd: 25, mana: 30, desc: 'Щит, поглощающий урон (40 + 300% маг. урона), на 10 сек.' },
     ],
   },
   archer: {
     id: 'archer', name: 'Лучник', icon: '🏹',
-    desc: 'Меткий стрелок. Быстрые атаки издалека и высокая подвижность.',
+    desc: 'Меткий стрелок. Огненные стрелы пробивают броню, ледяные — замедляют.',
     base: { str: 6, agi: 12, int: 3, vit: 7 },
     dmgType: 'phys', range: 20, atkCd: 1.3, weapon: 'bow', attackAnim: 'bow', projectile: 'arrow',
     look: { skin: 0xe8b890, shirt: 0x2e5a2a, pants: 0x4a3a22, boots: 0x3a2a1c, hair: 0xc89a50 },
+    branches: [
+      { name: 'Стихии', skills: ['firearrow', 'icearrow', 'aimed'] },
+      { name: 'Охотник', skills: ['net', 'mark', 'deadly'] },
+      { name: 'Следопыт', skills: ['volley', 'haste', 'leap'] },
+    ],
     skills: [
-      { id: 'aimed', name: 'Прицельный выстрел', icon: '🎯', type: 'projectile', proj: 'bigarrow', mult: 2.5, cd: 6, mana: 10, desc: 'Точный выстрел: 250% физического урона.' },
-      { id: 'volley', name: 'Залп', icon: '🏹', type: 'volley', mult: 1.3, radius: 7, cd: 10, mana: 20, desc: 'Град стрел по цели и врагам рядом с ней: 130% урона.' },
-      { id: 'haste', name: 'Попутный ветер', icon: '💨', type: 'buff', buff: 'haste', duration: 6, cd: 20, mana: 15, desc: '+50% к скорости бега и +30% к скорости атаки на 6 сек.' },
+      { id: 'aimed', name: 'Прицельный выстрел', icon: '🎯', lvl: 1, type: 'projectile', proj: 'bigarrow', mult: 2.5, cd: 6, mana: 10, desc: 'Точный выстрел: 250% физического урона.' },
+      { id: 'icearrow', name: 'Ледяная стрела', icon: '🧊', lvl: 1, type: 'projectile', proj: 'icearrow', mult: 1.1, fx: { slow: [0.5, 4] }, cd: 8, mana: 10, desc: '110% урона и замедление на 50% на 4 сек.' },
+      { id: 'firearrow', name: 'Огненная стрела', icon: '🔥', lvl: 2, type: 'projectile', proj: 'firearrow', mult: 1.5, fx: { pierce: 1, dot: [0.2, 4] }, cd: 7, mana: 12, desc: '150% урона сквозь броню и горение 4 сек.' },
+      { id: 'leap', name: 'Отскок', icon: '🐇', lvl: 3, type: 'leap', dist: 9, radius: 4, fx: { slow: [0.5, 2] }, cd: 12, mana: 10, desc: 'Отпрыгивает на 9 м назад и замедляет врагов рядом на 50% на 2 сек.' },
+      { id: 'volley', name: 'Залп', icon: '🏹', lvl: 4, type: 'volley', mult: 1.3, radius: 7, cd: 10, mana: 20, desc: 'Град стрел по цели и врагам рядом с ней: 130% урона.' },
+      { id: 'haste', name: 'Попутный ветер', icon: '💨', lvl: 5, type: 'buff', buff: 'haste', duration: 6, cd: 20, mana: 15, desc: '+50% к скорости бега и +30% к скорости атаки на 6 сек.' },
+      { id: 'net', name: 'Ловчая сеть', icon: '🕸️', lvl: 6, type: 'projectile', proj: 'net', mult: 0.6, fx: { root: 2 }, cd: 15, mana: 15, desc: '60% урона и обездвиживает цель на 2 сек (атаковать она может).' },
+      { id: 'mark', name: 'Метка охотника', icon: '🔻', lvl: 8, type: 'projectile', proj: 'arrow', mult: 0.5, fx: { vuln: [0.25, 8] }, cd: 18, mana: 15, desc: 'Помеченная цель 8 сек получает на 25% больше урона от всех.' },
+      { id: 'deadly', name: 'Смертельный выстрел', icon: '💀', lvl: 10, type: 'projectile', proj: 'bigarrow', mult: 3.8, cd: 20, mana: 35, desc: '380% урона одной стрелой.' },
     ],
   },
 };
+
+export const SKILL_SLOTS = 5;
+export const skillById = (cls, id) => cls.skills.find((s) => s.id === id);
+
+// набор умений по умолчанию: открытые по уровню, по порядку
+export function defaultLoadout(classId, level) {
+  return CLASSES[classId].skills.filter((s) => s.lvl <= level).slice(0, SKILL_SLOTS).map((s) => s.id);
+}
 
 // ---------------------------------------------------------------- предметы
 export const RARITIES = {
@@ -259,4 +299,20 @@ export function newSave(name, classId) {
     quests: { active: {}, done: [] },
     pos: [0, 7],
   };
+}
+
+// ---------------------------------------------------------------- эффекты умений
+// Формат по сети: { slow:[доля, сек, заморозка_в_конце], stun, knock, freeze, root, dot:{dps,d,pct}, pierce, vuln:[доля, сек] }
+export const CC_NAMES = { stun: 'Оглушён', knock: 'Подброшен', freeze: 'Заморожен', root: 'Обездвижен' };
+
+export function sanitizeFx(fx) {
+  if (!fx || typeof fx !== 'object') return null;
+  const n = (v, max) => Math.max(0, Math.min(max, Number(v) || 0));
+  const o = {};
+  if (Array.isArray(fx.slow)) o.slow = [n(fx.slow[0], 0.8), n(fx.slow[1], 6), n(fx.slow[2], 2)];
+  for (const k of ['stun', 'knock', 'freeze', 'root']) if (fx[k]) o[k] = n(fx[k], 3);
+  if (fx.dot && typeof fx.dot === 'object') o.dot = { dps: n(fx.dot.dps, 5000), d: n(fx.dot.d, 8), pct: n(fx.dot.pct, 0.05) };
+  if (fx.pierce) o.pierce = 1;
+  if (Array.isArray(fx.vuln)) o.vuln = [n(fx.vuln[0], 0.5), n(fx.vuln[1], 10)];
+  return o;
 }

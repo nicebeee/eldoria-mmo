@@ -1,6 +1,8 @@
 // Другие игроки: модель, табличка, плавная интерполяция позиции
 import * as THREE from 'three';
-import { CLASSES } from './data.js';
+import { CLASSES, CC_NAMES } from './data.js';
+
+const PVP_MULT = 0.6; // по игрокам проходит 60% урона
 import { createHumanoid, applyEquipment, createNameplate, animateModel, playAttack, setDead } from './models.js';
 import { lerpAngle } from './utils.js';
 
@@ -54,9 +56,22 @@ export class RemotePlayer {
   }
 
   // урон по другому игроку (PvP) — его применит сам пострадавший
-  takeDamage(amount, src, crit) {
+  takeDamage(amount, src, crit, fx) {
     if (this.dead || !this.game.social.canAttack(this)) return;
-    this.game.net.send({ t: 'pvp_hit', to: this.id, dmg: Math.round(amount * 0.6), crit: crit ? 1 : 0 });
+    const pvpFx = fx ? { ...fx } : null;
+    if (pvpFx?.dot) pvpFx.dot = { ...pvpFx.dot, dps: Math.round(pvpFx.dot.dps * PVP_MULT) };
+    this.game.net.send({ t: 'pvp_hit', to: this.id, dmg: Math.round(amount * PVP_MULT), crit: crit ? 1 : 0, fx: pvpFx });
+  }
+
+  // контроль на чужом игроке (видят все)
+  showCC(kind, dur) {
+    this.ccT = dur;
+    const col = { freeze: 0x3080ff, stun: 0x605000, root: 0x206020, knock: 0x000000 }[kind] ?? 0;
+    for (const m of this.model.userData.mats) {
+      if (m.userData.baseEmissive === undefined) m.userData.baseEmissive = m.emissive.getHex();
+      m.emissive.setHex(col || m.userData.baseEmissive);
+    }
+    this.game.fx.floatText(new THREE.Vector3(this.pos.x, this.pos.y + 2.4, this.pos.z), (CC_NAMES[kind] || '') + '!', 'info');
   }
 
   anim(type, dur) {
@@ -69,6 +84,9 @@ export class RemotePlayer {
   }
 
   update(dt) {
+    if (this.ccT > 0 && (this.ccT -= dt) <= 0) {
+      for (const m of this.model.userData.mats) if (m.userData.baseEmissive !== undefined) m.emissive.setHex(m.userData.baseEmissive);
+    }
     // далёкий прыжок (телепорт, воскрешение) — без интерполяции
     if (this.pos.distanceToSquared(this.target) > 400) this.pos.copy(this.target);
     else this.pos.lerp(this.target, 1 - Math.exp(-12 * dt));
