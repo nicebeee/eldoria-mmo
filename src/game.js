@@ -60,9 +60,11 @@ export class Game {
     this.saveTimer = 0;
     this.updateNpcMarkers();
     this.bindNet();
+    this.admin = !!welcome.admin;
 
     this.ui.log(`Добро пожаловать в Эльдорию, ${this.player.name}!`, 'good');
     this.ui.log(`На сервере игроков: ${this.remotes.size + 1}. Enter — написать в общий чат.`, 'good');
+    if (welcome.admin) this.ui.log('Вы администратор. Команды: /max_item [имя] — легендарный комплект, /max_stat [имя] — максимальный уровень и характеристики. Без имени — себе. Можно и так: /max_stat_Имя', 'quest');
     this.ui.log('WASD — движение, мышь (зажать) — камера, ЛКМ по врагу — атака, 1-3 — умения, 4-5 — зелья, E — говорить, I/C/L — окна. /help — все клавиши.', 'sys');
 
     addEventListener('resize', () => {
@@ -393,6 +395,10 @@ export class Game {
       });
     });
     net.on('hurt', (m) => this.player.takeDamage(m.dmg));
+    net.on('admin_apply', (m) => {
+      this.player.applyAdmin(m.cmd, m.items);
+      if (m.by !== this.player.name) ui.log(`Администратор ${m.by} выдал вам ${m.cmd === 'max_item' ? 'легендарный комплект' : 'максимальные характеристики'}!`, 'good');
+    });
     net.on('kill', (m) => { const e = this.enemies[m.e]; if (e) this.onEnemyKilled(e); });
     net.on('chat', (m) => ui.log(`${m.party ? '[Группа] ' : ''}<b>[${escapeHtml(m.from)}]</b>: ${escapeHtml(m.msg)}`, m.party ? 'party' : 'say', true));
     net.on('sys', (m) => ui.log(m.msg, 'sys'));

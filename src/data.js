@@ -65,6 +65,7 @@ export const RARITIES = {
   uncommon: { name: 'Необычный', color: '#4fd65f', bonus: [1, 2], mult: 1.15 },
   rare: { name: 'Редкий', color: '#4a90ff', bonus: [2, 3], mult: 1.3 },
   epic: { name: 'Эпический', color: '#b45cff', bonus: [3, 4], mult: 1.5 },
+  legendary: { name: 'Легендарный', color: '#ff9a2a', bonus: [4, 4], mult: 1.8 }, // только от админа
 };
 const RARITY_WEIGHTS = [['common', 60], ['uncommon', 28], ['rare', 10], ['epic', 2]];
 
@@ -103,25 +104,36 @@ export function generateItem(slot, level, opts = {}) {
   if (slot === 'weapon') {
     const wt = opts.weaponType || pick(['sword', 'staff', 'bow']);
     item.weaponType = wt;
-    item.dmg = Math.round((5 + level * 2.6) * R.mult * rand(0.92, 1.08));
+    item.dmg = Math.round((5 + level * 2.6) * R.mult * (opts.max ? 1.1 : rand(0.92, 1.08)));
     item.color = WEAPON_COLORS[wt][tier];
     baseName = BASE_NAMES[wt][tier];
   } else {
-    item.armor = Math.max(1, Math.round((2 + level * 1.4) * ARMOR_MULT[slot] * R.mult * rand(0.9, 1.1)));
+    item.armor = Math.max(1, Math.round((2 + level * 1.4) * ARMOR_MULT[slot] * R.mult * (opts.max ? 1.1 : rand(0.9, 1.1))));
     item.color = ARMOR_COLORS[tier];
     baseName = BASE_NAMES[slot][tier];
   }
   const nb = opts.noBonus ? 0 : randInt(R.bonus[0], R.bonus[1]);
-  for (let i = 0; i < nb; i++) {
+  if (opts.max) {
+    // максимальный бонус ко всем характеристикам, основная — у оружия ещё выше
+    for (const k of STAT_KEYS) item.stats[k] = 1 + Math.ceil(level / 2);
+    if (item.weaponType) item.stats[AFFINITY[item.weaponType]] += 5;
+  } else for (let i = 0; i < nb; i++) {
     const st = i === 0 && item.weaponType && Math.random() < 0.7 ? AFFINITY[item.weaponType] : pick(STAT_KEYS);
     item.stats[st] = (item.stats[st] || 0) + randInt(1, 1 + Math.ceil(level / 2));
   }
   let best = null;
   for (const k in item.stats) if (!best || item.stats[k] > item.stats[best]) best = k;
-  item.name = best ? `${baseName} ${SUFFIX[best]}` : baseName;
+  item.name = opts.max ? `${baseName} Владыки` : best ? `${baseName} ${SUFFIX[best]}` : baseName;
   item.value = Math.round((4 + level * 3) * R.mult * (1 + nb * 0.4));
   return item;
 }
+
+// самый сильный предмет для слота (админ-команда /max_item)
+export function makeMaxItem(slot, weaponType) {
+  return generateItem(slot, MAX_LEVEL, { rarity: 'legendary', weaponType, max: true });
+}
+
+export const MAX_ALLOC = 99; // очков в каждую характеристику по /max_stat
 
 export function makePotion(type, count = 1) {
   return {

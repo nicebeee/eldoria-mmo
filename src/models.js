@@ -254,7 +254,7 @@ function makeHelmet(item) {
   return g;
 }
 
-const RARITY_GLOW = { rare: 0x3d8bff, epic: 0xb45cff };
+const RARITY_GLOW = { rare: 0x3d8bff, epic: 0xb45cff, legendary: 0xff8a20 };
 
 // eq: { head, chest, hands, feet, weapon } — объекты предметов или null
 export function applyEquipment(model, eq = {}) {

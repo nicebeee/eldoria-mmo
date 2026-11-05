@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CLASSES, SLOTS, STAT_KEYS, MAX_LEVEL, POINTS_PER_LEVEL, xpForLevel, makePotion } from './data.js';
+import { CLASSES, SLOTS, STAT_KEYS, MAX_LEVEL, MAX_ALLOC, POINTS_PER_LEVEL, xpForLevel, makePotion } from './data.js';
 import { createHumanoid, applyEquipment, playAttack, animateModel, setDead, createNameplate } from './models.js';
 import { heightAt, WORLD_HALF } from './world.js';
 import { rand, clamp, distXZ, lerpAngle } from './utils.js';
@@ -497,6 +497,34 @@ export class Player {
       if (i >= 0) inv[i] = it;
     }
     return inv;
+  }
+
+  // результат админ-команды с сервера
+  applyAdmin(cmd, items) {
+    if (cmd === 'max_item' && items) {
+      for (const it of items) {
+        const old = this.equipment[it.slot];
+        this.equipment[it.slot] = it;
+        if (old) this.addItem(old);
+      }
+      this.refreshEquipment();
+      this.game.ui.banner('Легендарный комплект!', 'Все слоты экипировки обновлены', 'quest');
+    }
+    if (cmd === 'max_stat') {
+      this.level = MAX_LEVEL;
+      this.xp = 0;
+      this.statPoints = 0;
+      for (const k of STAT_KEYS) this.alloc[k] = MAX_ALLOC;
+      this.game.ui.banner(`Уровень ${MAX_LEVEL}!`, 'Характеристики увеличены до максимума', 'quest');
+      this.game.updateNpcMarkers();
+    }
+    const d = this.derived();
+    this.hp = d.maxHp;
+    this.mp = d.maxMp;
+    this.game.fx.pillar(this.pos, 0xff9a2a, 1.6);
+    this.game.fx.ring(this.pos, 4, 0xff9a2a, 0.8);
+    this.game.ui.refresh();
+    this.game.save();
   }
 
   serialize() {

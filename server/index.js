@@ -6,7 +6,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { CLASSES, newSave } from '../src/data.js';
+import { CLASSES, SLOTS, MAX_LEVEL, MAX_ALLOC, newSave, makeMaxItem } from '../src/data.js';
 import { World } from './world.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -52,6 +52,43 @@ function login(name, pass) {
   return acc;
 }
 
+// ------------------------------------------------ админка
+const ADMINS = (process.env.ADMINS || 'nicebee').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+const isAdmin = (acc) => ADMINS.includes(acc.username.toLowerCase());
+
+function adminCommand(player, m) {
+  const sys = (msg) => player.send({ t: 'sys', msg });
+  if (!isAdmin(player.account)) return sys('Нет прав администратора');
+  const cmd = m.cmd;
+  if (cmd !== 'max_item' && cmd !== 'max_stat') return sys('Неизвестная команда');
+  const name = String(m.target || '').trim() || player.account.username;
+  const acc = accounts[name.toLowerCase()];
+  if (!acc) return sys(`Герой «${name}» не найден`);
+  const weapon = CLASSES[acc.save.classId].weapon;
+  const items = cmd === 'max_item' ? SLOTS.map((s) => makeMaxItem(s, weapon)) : null;
+  const online = world.findByAccount(acc.username);
+  if (online) {
+    online.send({ t: 'admin_apply', cmd, items, by: player.account.username });
+  } else {
+    // герой не в игре — правим его сохранение напрямую
+    const s = acc.save;
+    if (items) {
+      for (const it of items) {
+        const old = s.equipment[it.slot];
+        s.equipment[it.slot] = it;
+        const free = s.inventory.indexOf(null);
+        if (old && free >= 0) s.inventory[free] = old;
+      }
+    } else {
+      s.level = MAX_LEVEL; s.xp = 0; s.statPoints = 0;
+      s.alloc = { str: MAX_ALLOC, agi: MAX_ALLOC, int: MAX_ALLOC, vit: MAX_ALLOC };
+      delete s.hp; delete s.mp;
+    }
+    dirty = true;
+  }
+  sys(`${cmd === 'max_item' ? 'Легендарный комплект выдан' : 'Максимальные характеристики выданы'}: ${acc.username}${online ? '' : ' (не в сети — применится при входе)'}`);
+}
+
 // ------------------------------------------------ статика
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.ico': 'image/x-icon' };
 const server = http.createServer((req, res) => {
@@ -93,7 +130,7 @@ wss.on('connection', (ws) => {
         const old = world.findByAccount(acc.username);
         if (old) { old.send({ t: 'kicked', msg: 'Вход с другого устройства' }); old.ws.close(); world.removePlayer(old.id); }
         player = world.addPlayer(nextId++, ws, send, acc);
-        send({ t: 'welcome', id: player.id, save: acc.save, ...world.snapshot(player.id) });
+        send({ t: 'welcome', id: player.id, save: acc.save, admin: isAdmin(acc), ...world.snapshot(player.id) });
         world.broadcast({ t: 'sys', msg: `${acc.username} вошёл в игру` }, player.id);
       } catch (e) {
         send({ t: 'auth_err', msg: e.message });
@@ -106,6 +143,7 @@ wss.on('connection', (ws) => {
       dirty = true;
       return;
     }
+    if (m.t === 'admin') return adminCommand(player, m);
     world.onMessage(player, m);
   });
 

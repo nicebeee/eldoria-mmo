@@ -67,6 +67,10 @@ export class UI {
     } else if (/^\/(invite|trade|duel)\s+/.test(msg)) {
       const [cmd, ...rest] = msg.slice(1).split(/\s+/);
       this.g.social.request({ invite: 'party', trade: 'trade', duel: 'duel' }[cmd], this.g.social.findRemote(rest.join(' ')));
+    } else if (/^\/(max_item|max_stat)(?:$|[_\s])/i.test(msg)) {
+      // /max_item, /max_item Имя, /max_item_Имя (то же для /max_stat)
+      const [, cmd, target] = msg.match(/^\/(max_item|max_stat)(?:[_\s]+(.+))?$/i) || [];
+      if (cmd) this.g.net.send({ t: 'admin', cmd: cmd.toLowerCase(), target: (target || '').trim() });
     } else if (msg === '/leave') {
       this.g.net.send({ t: 'party_leave' });
     } else if (msg.startsWith('/p ')) {
