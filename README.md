@@ -2,16 +2,19 @@
 
 Браузерная 3D MMO-RPG на Three.js: регистрация, 3 класса (воин, маг, лучник), открытый мир, монстры, задания, экипировка, характеристики.
 
-**Играть:** https://nicebeee.github.io/eldoria-mmo/
+**Играть (мультиплеер):** https://eldoria-mmo-production.up.railway.app/
+
+Сервер — `server/` (Node.js + WebSocket), хостинг Railway. Аккаунты и прогресс хранятся на сервере.
 
 ## Запуск локально
 
 ```
 npm install
-npm run dev
+npm run build
+npm start        # http://localhost:8080
 ```
 
-или двойной клик по `start.bat` (Windows).
+или двойной клик по `start.bat` (Windows). Для разработки: `npm run server` и `npm run dev` в двух терминалах.
 
 ## Управление
 
